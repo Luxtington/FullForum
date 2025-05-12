@@ -1,7 +1,6 @@
 package handler
 
 import (
-    "net/http"
     "path/filepath"
     "github.com/gin-gonic/gin"
 )
@@ -16,18 +15,10 @@ func NewTemplateHandler(templatesDir string) *TemplateHandler {
     }
 }
 
-func (h *TemplateHandler) ServeRegisterPage(w http.ResponseWriter, r *http.Request) {
-    http.ServeFile(w, r, filepath.Join(h.templatesDir, "register.html"))
-}
-
-func (h *TemplateHandler) ServeLoginPage(w http.ResponseWriter, r *http.Request) {
-    http.ServeFile(w, r, filepath.Join(h.templatesDir, "login.html"))
-}
-
-func (h *TemplateHandler) ServeRegisterPageGin(c *gin.Context) {
+func (h *TemplateHandler) ServeRegisterPage(c *gin.Context) {
     c.File(filepath.Join(h.templatesDir, "register.html"))
 }
 
-func (h *TemplateHandler) ServeLoginPageGin(c *gin.Context) {
+func (h *TemplateHandler) ServeLoginPage(c *gin.Context) {
     c.File(filepath.Join(h.templatesDir, "login.html"))
 } 

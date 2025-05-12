@@ -63,13 +63,13 @@ func main() {
     r.Static("/static", "./internal/templates")
 
     // API маршруты
-    r.POST("/api/auth/register", authHandler.RegisterGin)
-    r.POST("/api/auth/login", authHandler.LoginGin)
-    r.GET("/api/auth/validate", authHandler.ValidateTokenGin)
+    r.POST("/api/auth/register", authHandler.Register)
+    r.POST("/api/auth/login", authHandler.Login)
+    r.GET("/api/auth/validate", authHandler.ValidateToken)
 
-    // Маршруты для страниц (если нужно)
-    r.GET("/register", templateHandler.ServeRegisterPageGin)
-    r.GET("/login", templateHandler.ServeLoginPageGin)
+    // Маршруты для страниц
+    r.GET("/register", templateHandler.ServeRegisterPage)
+    r.GET("/login", templateHandler.ServeLoginPage)
 
     // Запуск сервера
     serverAddr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
