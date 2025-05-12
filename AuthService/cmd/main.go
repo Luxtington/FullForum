@@ -8,8 +8,9 @@ import (
     "database/sql"
     "fmt"
     "log"
-    "net/http"
     _ "github.com/lib/pq"
+    "github.com/gin-gonic/gin"
+    "github.com/gin-contrib/cors"
 )
 
 func main() {
@@ -46,17 +47,32 @@ func main() {
     authHandler := handler.NewAuthHandler(authService)
     templateHandler := handler.NewTemplateHandler("internal/templates")
 
-    // Настройка маршрутов API
-    http.HandleFunc("/api/auth/register", authHandler.Register)
-    http.HandleFunc("/api/auth/login", authHandler.Login)
-    http.HandleFunc("/api/auth/validate", authHandler.ValidateToken)
+    // Создаём gin router
+    r := gin.Default()
 
-    // Настройка маршрутов для страниц
-    http.HandleFunc("/register", templateHandler.ServeRegisterPage)
-    http.HandleFunc("/login", templateHandler.ServeLoginPage)
+    // Настройка CORS
+    r.Use(cors.New(cors.Config{
+        AllowOrigins:     []string{"*"},
+        AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+        AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+        ExposeHeaders:    []string{"Content-Length"},
+        AllowCredentials: true,
+    }))
+
+    // Настройка статических файлов
+    r.Static("/static", "./internal/templates")
+
+    // API маршруты
+    r.POST("/api/auth/register", authHandler.RegisterGin)
+    r.POST("/api/auth/login", authHandler.LoginGin)
+    r.GET("/api/auth/validate", authHandler.ValidateTokenGin)
+
+    // Маршруты для страниц (если нужно)
+    r.GET("/register", templateHandler.ServeRegisterPageGin)
+    r.GET("/login", templateHandler.ServeLoginPageGin)
 
     // Запуск сервера
     serverAddr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
     log.Printf("Сервер аутентификации запущен на %s", serverAddr)
-    log.Fatal(http.ListenAndServe(serverAddr, nil))
+    log.Fatal(r.Run(serverAddr))
 } 
