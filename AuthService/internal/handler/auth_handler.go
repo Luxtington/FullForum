@@ -27,7 +27,13 @@ func (h *AuthHandler) Register(c *gin.Context) {
         c.JSON(400, gin.H{"error": err.Error()})
         return
     }
-    c.JSON(200, response)
+    
+    // Возвращаем JSON с токеном и URL для перенаправления
+    c.JSON(200, gin.H{
+        "token": response.Token,
+        "user": response.User,
+        "redirect_url": "http://localhost:8080",
+    })
 }
 
 func (h *AuthHandler) Login(c *gin.Context) {
@@ -41,7 +47,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
         c.JSON(401, gin.H{"error": err.Error()})
         return
     }
-    c.JSON(200, response)
+    
+    // Возвращаем JSON с токеном и URL для перенаправления
+    c.JSON(200, gin.H{
+        "token": response.Token,
+        "user": response.User,
+        "redirect_url": "http://localhost:8080",
+    })
 }
 
 func (h *AuthHandler) ValidateToken(c *gin.Context) {

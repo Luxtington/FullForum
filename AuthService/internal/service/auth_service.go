@@ -3,10 +3,12 @@ package service
 import (
     "AuthService/internal/models"
     "AuthService/internal/repository"
+    "database/sql"
     "errors"
     "golang.org/x/crypto/bcrypt"
     "github.com/golang-jwt/jwt"
     "time"
+    "log"
 )
 
 type AuthService interface {
@@ -30,7 +32,8 @@ func NewAuthService(userRepo repository.UserRepository, jwtKey string) AuthServi
 func (s *authService) Register(req *models.RegisterRequest) (*models.AuthResponse, error) {
     // Проверяем, существует ли пользователь с таким email
     existingUser, err := s.userRepo.GetByEmail(req.Email)
-    if err != nil {
+    if err != nil && err != sql.ErrNoRows {
+        log.Printf("Error checking existing user by email: %v", err)
         return nil, err
     }
     if existingUser != nil {
@@ -39,7 +42,8 @@ func (s *authService) Register(req *models.RegisterRequest) (*models.AuthRespons
 
     // Проверяем, существует ли пользователь с таким username
     existingUser, err = s.userRepo.GetByUsername(req.Username)
-    if err != nil {
+    if err != nil && err != sql.ErrNoRows {
+        log.Printf("Error checking existing user by username: %v", err)
         return nil, err
     }
     if existingUser != nil {
@@ -48,18 +52,21 @@ func (s *authService) Register(req *models.RegisterRequest) (*models.AuthRespons
 
     // Создаем нового пользователя
     user := &models.User{
-        Username:     req.Username,
-        Email:        req.Email,
-        PasswordHash: req.Password,
+        Username: req.Username,
+        Email:    req.Email,
+        Password: req.Password,
+        Role:     "user",
     }
 
     if err := s.userRepo.Create(user); err != nil {
+        log.Printf("Error creating user: %v", err)
         return nil, err
     }
 
     // Генерируем JWT токен
     token, err := s.generateToken(user)
     if err != nil {
+        log.Printf("Error generating token: %v", err)
         return nil, err
     }
 
@@ -71,7 +78,8 @@ func (s *authService) Register(req *models.RegisterRequest) (*models.AuthRespons
 
 func (s *authService) Login(req *models.LoginRequest) (*models.AuthResponse, error) {
     user, err := s.userRepo.GetByUsername(req.Username)
-    if err != nil {
+    if err != nil && err != sql.ErrNoRows {
+        log.Printf("Error getting user by username: %v", err)
         return nil, err
     }
     if user == nil {
@@ -79,7 +87,7 @@ func (s *authService) Login(req *models.LoginRequest) (*models.AuthResponse, err
     }
 
     // Проверяем пароль
-    err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password))
+    err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password))
     if err != nil {
         return nil, errors.New("неверное имя пользователя или пароль")
     }
@@ -87,6 +95,7 @@ func (s *authService) Login(req *models.LoginRequest) (*models.AuthResponse, err
     // Генерируем JWT токен
     token, err := s.generateToken(user)
     if err != nil {
+        log.Printf("Error generating token: %v", err)
         return nil, err
     }
 
