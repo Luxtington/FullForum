@@ -37,7 +37,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
         "/",
         "localhost",
         false, // httpOnly
-        true,  // secure
+        false,  // secure
     )
     
     c.JSON(200, gin.H{
@@ -66,7 +66,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
         "/",
         "localhost",
         false, // httpOnly
-        true,  // secure
+        false,  // secure
     )
     
     c.JSON(200, gin.H{
