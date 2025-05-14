@@ -42,7 +42,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
     
     c.JSON(200, gin.H{
         "user": response.User,
-        "redirect_url": "http://localhost:8080",
+        "redirect_url": "http://localhost:8081",
     })
 }
 
@@ -71,7 +71,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
     
     c.JSON(200, gin.H{
         "user": response.User,
-        "redirect_url": "http://localhost:8080",
+        "redirect_url": "http://localhost:8081",
     })
 }
 
