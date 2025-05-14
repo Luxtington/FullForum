@@ -11,6 +11,7 @@ import (
     _ "github.com/lib/pq"
     "github.com/gin-gonic/gin"
     "github.com/gin-contrib/cors"
+    "time"
 )
 
 func main() {
@@ -52,11 +53,12 @@ func main() {
 
     // Настройка CORS
     r.Use(cors.New(cors.Config{
-        AllowOrigins:     []string{"*"},
+        AllowOrigins:     []string{"http://localhost:8080"},
         AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
         AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
         ExposeHeaders:    []string{"Content-Length"},
         AllowCredentials: true,
+        MaxAge:           12 * time.Hour,
     }))
 
     // Настройка статических файлов
@@ -66,6 +68,7 @@ func main() {
     r.POST("/api/auth/register", authHandler.Register)
     r.POST("/api/auth/login", authHandler.Login)
     r.GET("/api/auth/validate", authHandler.ValidateToken)
+    r.POST("/api/auth/logout", authHandler.Logout)
 
     // Маршруты для страниц
     r.GET("/register", templateHandler.ServeRegisterPage)

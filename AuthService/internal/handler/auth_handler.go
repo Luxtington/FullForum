@@ -4,6 +4,7 @@ import (
     "AuthService/internal/models"
     "AuthService/internal/service"
     "github.com/gin-gonic/gin"
+    "time"
 )
 
 type AuthHandler struct {
@@ -28,9 +29,18 @@ func (h *AuthHandler) Register(c *gin.Context) {
         return
     }
     
-    // Возвращаем JSON с токеном и URL для перенаправления
+    // Устанавливаем куки с токеном
+    c.SetCookie(
+        "auth_token",
+        response.Token,
+        int(time.Hour*24*7), // 7 дней
+        "/",
+        "localhost",
+        false, // httpOnly
+        true,  // secure
+    )
+    
     c.JSON(200, gin.H{
-        "token": response.Token,
         "user": response.User,
         "redirect_url": "http://localhost:8080",
     })
@@ -48,17 +58,26 @@ func (h *AuthHandler) Login(c *gin.Context) {
         return
     }
     
-    // Возвращаем JSON с токеном и URL для перенаправления
+    // Устанавливаем куки с токеном
+    c.SetCookie(
+        "auth_token",
+        response.Token,
+        int(time.Hour*24*7), // 7 дней
+        "/",
+        "localhost",
+        false, // httpOnly
+        true,  // secure
+    )
+    
     c.JSON(200, gin.H{
-        "token": response.Token,
         "user": response.User,
         "redirect_url": "http://localhost:8080",
     })
 }
 
 func (h *AuthHandler) ValidateToken(c *gin.Context) {
-    token := c.GetHeader("Authorization")
-    if token == "" {
+    token, err := c.Cookie("auth_token")
+    if err != nil {
         c.JSON(401, gin.H{"error": "токен не предоставлен"})
         return
     }
@@ -68,4 +87,17 @@ func (h *AuthHandler) ValidateToken(c *gin.Context) {
         return
     }
     c.JSON(200, user)
+}
+
+func (h *AuthHandler) Logout(c *gin.Context) {
+    c.SetCookie(
+        "auth_token",
+        "",
+        -1,
+        "/",
+        "localhost",
+        false,
+        true,
+    )
+    c.JSON(200, gin.H{"message": "успешный выход"})
 } 

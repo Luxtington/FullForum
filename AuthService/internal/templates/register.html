@@ -121,7 +121,6 @@
                 const result = await response.json();
                 
                 if (response.ok) {
-                    localStorage.setItem('token', result.token);
                     window.location.href = result.redirect_url;
                 } else {
                     errorDiv.textContent = result.error || 'Произошла ошибка при регистрации';
