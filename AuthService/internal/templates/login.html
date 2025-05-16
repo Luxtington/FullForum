@@ -105,6 +105,7 @@
             };
 
             try {
+                console.log('Отправка запроса на вход...');
                 const response = await fetch('/api/auth/login', {
                     method: 'POST',
                     headers: {
@@ -113,14 +114,19 @@
                     body: JSON.stringify(data)
                 });
 
+                console.log('Получен ответ:', response.status);
                 const result = await response.json();
+                console.log('Данные ответа:', result);
                 
                 if (response.ok) {
-                    window.location.href = result.redirect_url;
+                    console.log('Вход успешен');
+                    window.location.href = result.redirect_url || 'http://localhost:8081';
                 } else {
+                    console.error('Ошибка входа:', result.error);
                     errorDiv.textContent = result.error || 'Произошла ошибка при входе';
                 }
             } catch (error) {
+                console.error('Ошибка при входе:', error);
                 errorDiv.textContent = 'Произошла ошибка при входе';
             }
         });

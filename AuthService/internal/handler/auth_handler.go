@@ -4,6 +4,7 @@ import (
     "AuthService/internal/models"
     "AuthService/internal/service"
     "github.com/gin-gonic/gin"
+    "strings"
     "time"
 )
 
@@ -35,7 +36,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
         response.Token,
         int(time.Hour*24*7), // 7 дней
         "/",
-        "localhost",
+        "localhost",  // Устанавливаем домен localhost
         false, // httpOnly
         false,  // secure
     )
@@ -64,23 +65,40 @@ func (h *AuthHandler) Login(c *gin.Context) {
         response.Token,
         int(time.Hour*24*7), // 7 дней
         "/",
-        "localhost",
+        "localhost",  // Устанавливаем домен localhost
         false, // httpOnly
         false,  // secure
     )
     
     c.JSON(200, gin.H{
         "user": response.User,
+        "token": response.Token,
         "redirect_url": "http://localhost:8081",
     })
 }
 
 func (h *AuthHandler) ValidateToken(c *gin.Context) {
-    token, err := c.Cookie("auth_token")
-    if err != nil {
+    // Сначала проверяем заголовок Authorization
+    authHeader := c.GetHeader("Authorization")
+    var token string
+    if authHeader != "" {
+        // Убираем префикс "Bearer " если он есть
+        token = strings.TrimPrefix(authHeader, "Bearer ")
+    } else {
+        // Если нет в заголовке, проверяем куки
+        var err error
+        token, err = c.Cookie("auth_token")
+        if err != nil {
+            c.JSON(401, gin.H{"error": "токен не предоставлен"})
+            return
+        }
+    }
+
+    if token == "" {
         c.JSON(401, gin.H{"error": "токен не предоставлен"})
         return
     }
+
     user, err := h.authService.ValidateToken(token)
     if err != nil {
         c.JSON(401, gin.H{"error": err.Error()})
@@ -95,7 +113,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
         "",
         -1,
         "/",
-        "localhost",
+        "",
         false,
         true,
     )

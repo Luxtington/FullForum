@@ -53,10 +53,10 @@ func main() {
 
     // Настройка CORS
     r.Use(cors.New(cors.Config{
-        AllowOrigins:     []string{"http://localhost:8080"},
+        AllowOrigins:     []string{"http://localhost:8081"},
         AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-        AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
-        ExposeHeaders:    []string{"Content-Length"},
+        AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "Cookie"},
+        ExposeHeaders:    []string{"Content-Length", "Set-Cookie"},
         AllowCredentials: true,
         MaxAge:           12 * time.Hour,
     }))
