@@ -1,145 +1,136 @@
 package service
 
 import (
-    "AuthService/internal/models"
-    "AuthService/internal/repository"
-    "database/sql"
-    "errors"
-    "golang.org/x/crypto/bcrypt"
-    "github.com/golang-jwt/jwt"
-    "time"
-    "log"
+	"AuthService/internal/models"
+	"AuthService/internal/repository"
+	"errors"
+	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
+	"time"
 )
 
-type AuthService interface {
-    Register(req *models.RegisterRequest) (*models.AuthResponse, error)
-    Login(req *models.LoginRequest) (*models.AuthResponse, error)
-    ValidateToken(token string) (*models.User, error)
+var (
+	ErrUserNotFound      = errors.New("пользователь не найден")
+	ErrInvalidPassword   = errors.New("неверный пароль")
+	ErrUserAlreadyExists = errors.New("пользователь уже существует")
+	ErrInvalidToken      = errors.New("недействительный токен")
+)
+
+type AuthService struct {
+	userRepo repository.UserRepository
+	jwtKey   []byte
 }
 
-type authService struct {
-    userRepo repository.UserRepository
-    jwtKey   []byte
+func NewAuthService(userRepo repository.UserRepository) *AuthService {
+	return &AuthService{
+		userRepo: userRepo,
+		jwtKey:   []byte("your-secret-key"), // В продакшене использовать безопасный ключ
+	}
 }
 
-func NewAuthService(userRepo repository.UserRepository, jwtKey string) AuthService {
-    return &authService{
-        userRepo: userRepo,
-        jwtKey:   []byte(jwtKey),
-    }
+func (s *AuthService) Register(username, password string) (*models.User, string, error) {
+	// Проверяем, существует ли пользователь
+	exists, err := s.userRepo.UserExists(username)
+	if err != nil {
+		return nil, "", err
+	}
+	if exists {
+		return nil, "", ErrUserAlreadyExists
+	}
+
+	// Хешируем пароль
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, "", err
+	}
+
+	// Создаем пользователя
+	user := &models.User{
+		Username: username,
+		Password: string(hashedPassword),
+		Role:     "user", // По умолчанию обычный пользователь
+	}
+
+	if err := s.userRepo.CreateUser(user); err != nil {
+		return nil, "", err
+	}
+
+	// Генерируем JWT токен
+	token, err := s.generateToken(user)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return user, token, nil
 }
 
-func (s *authService) Register(req *models.RegisterRequest) (*models.AuthResponse, error) {
-    // Проверяем, существует ли пользователь с таким email
-    existingUser, err := s.userRepo.GetByEmail(req.Email)
-    if err != nil && err != sql.ErrNoRows {
-        log.Printf("Error checking existing user by email: %v", err)
-        return nil, err
-    }
-    if existingUser != nil {
-        return nil, errors.New("пользователь с таким email уже существует")
-    }
+func (s *AuthService) Login(username, password string) (*models.User, string, error) {
+	// Получаем пользователя
+	user, err := s.userRepo.GetUserByUsername(username)
+	if err != nil {
+		return nil, "", ErrUserNotFound
+	}
 
-    // Проверяем, существует ли пользователь с таким username
-    existingUser, err = s.userRepo.GetByUsername(req.Username)
-    if err != nil && err != sql.ErrNoRows {
-        log.Printf("Error checking existing user by username: %v", err)
-        return nil, err
-    }
-    if existingUser != nil {
-        return nil, errors.New("пользователь с таким именем уже существует")
-    }
+	// Проверяем пароль
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+		return nil, "", ErrInvalidPassword
+	}
 
-    // Создаем нового пользователя
-    user := &models.User{
-        Username: req.Username,
-        Email:    req.Email,
-        Password: req.Password,
-        Role:     "user",
-    }
+	// Генерируем JWT токен
+	token, err := s.generateToken(user)
+	if err != nil {
+		return nil, "", err
+	}
 
-    if err := s.userRepo.Create(user); err != nil {
-        log.Printf("Error creating user: %v", err)
-        return nil, err
-    }
-
-    // Генерируем JWT токен
-    token, err := s.generateToken(user)
-    if err != nil {
-        log.Printf("Error generating token: %v", err)
-        return nil, err
-    }
-
-    return &models.AuthResponse{
-        Token: token,
-        User:  *user,
-    }, nil
+	return user, token, nil
 }
 
-func (s *authService) Login(req *models.LoginRequest) (*models.AuthResponse, error) {
-    user, err := s.userRepo.GetByUsername(req.Username)
-    if err != nil && err != sql.ErrNoRows {
-        log.Printf("Error getting user by username: %v", err)
-        return nil, err
-    }
-    if user == nil {
-        return nil, errors.New("неверное имя пользователя или пароль")
-    }
+func (s *AuthService) ValidateToken(tokenString string) (*models.User, error) {
+	// Парсим токен
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, ErrInvalidToken
+		}
+		return s.jwtKey, nil
+	})
 
-    // Проверяем пароль
-    err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password))
-    if err != nil {
-        return nil, errors.New("неверное имя пользователя или пароль")
-    }
+	if err != nil {
+		return nil, ErrInvalidToken
+	}
 
-    // Генерируем JWT токен
-    token, err := s.generateToken(user)
-    if err != nil {
-        log.Printf("Error generating token: %v", err)
-        return nil, err
-    }
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		// Получаем ID пользователя из токена
+		userID := uint(claims["user_id"].(float64))
 
-    return &models.AuthResponse{
-        Token: token,
-        User:  *user,
-    }, nil
+		// Получаем пользователя из базы данных
+		user, err := s.userRepo.GetUserByID(int(userID))
+		if err != nil {
+			return nil, ErrUserNotFound
+		}
+
+		return user, nil
+	}
+
+	return nil, ErrInvalidToken
 }
 
-func (s *authService) ValidateToken(tokenString string) (*models.User, error) {
-    token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-        return s.jwtKey, nil
-    })
+func (s *AuthService) generateToken(user *models.User) (string, error) {
+	// Создаем claims для токена
+	claims := jwt.MapClaims{
+		"user_id":  user.ID,
+		"username": user.Username,
+		"role":     user.Role,
+		"exp":      time.Now().Add(time.Hour * 24).Unix(), // Токен действителен 24 часа
+	}
 
-    if err != nil {
-        return nil, err
-    }
+	// Создаем токен
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
-    if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-        userID := int(claims["user_id"].(float64))
-        user, err := s.userRepo.GetByID(userID)
-        if err != nil {
-            return nil, err
-        }
-        // Устанавливаем роль из токена
-        if role, ok := claims["role"].(string); ok {
-            log.Printf("Debug - Role from token: %q\n", role)
-            user.Role = role
-        }
-        log.Printf("Debug - User role after setting: %q\n", user.Role)
-        return user, nil
-    }
+	// Подписываем токен
+	tokenString, err := token.SignedString(s.jwtKey)
+	if err != nil {
+		return "", err
+	}
 
-    return nil, errors.New("недействительный токен")
-}
-
-func (s *authService) generateToken(user *models.User) (string, error) {
-    log.Printf("Debug - Generating token for user with role: %q\n", user.Role)
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-        "user_id":  user.ID,
-        "username": user.Username,
-        "role":     user.Role,
-        "exp":      time.Now().Add(time.Hour * 24 * 7).Unix(), // Токен действителен 7 дней
-    })
-
-    return token.SignedString(s.jwtKey)
+	return tokenString, nil
 } 

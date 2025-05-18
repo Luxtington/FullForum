@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"errors"
 	"log"
 	"time"
 
@@ -10,10 +11,11 @@ import (
 )
 
 type UserRepository interface {
-	Create(user *models.User) error
-	GetByUsername(username string) (*models.User, error)
-	GetByEmail(email string) (*models.User, error)
-	GetByID(id int) (*models.User, error)
+	CreateUser(user *models.User) error
+	GetUserByID(id int) (*models.User, error)
+	GetUserByUsername(username string) (*models.User, error)
+	UserExists(username string) (bool, error)
+	GetUserRole(userID int) (string, error)
 }
 
 type userRepository struct {
@@ -22,6 +24,89 @@ type userRepository struct {
 
 func NewUserRepository(db *sql.DB) UserRepository {
 	return &userRepository{db: db}
+}
+
+func (r *userRepository) CreateUser(user *models.User) error {
+	query := `
+		INSERT INTO users (username, password, role)
+		VALUES ($1, $2, $3)
+		RETURNING id`
+
+	err := r.db.QueryRow(query, user.Username, user.Password, user.Role).Scan(&user.ID)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *userRepository) GetUserByID(id int) (*models.User, error) {
+	query := `
+		SELECT id, username, password, role
+		FROM users
+		WHERE id = $1`
+
+	user := &models.User{}
+	err := r.db.QueryRow(query, id).Scan(&user.ID, &user.Username, &user.Password, &user.Role)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, errors.New("пользователь не найден")
+		}
+		return nil, err
+	}
+
+	return user, nil
+}
+
+func (r *userRepository) GetUserByUsername(username string) (*models.User, error) {
+	query := `
+		SELECT id, username, password, role
+		FROM users
+		WHERE username = $1`
+
+	user := &models.User{}
+	err := r.db.QueryRow(query, username).Scan(&user.ID, &user.Username, &user.Password, &user.Role)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, errors.New("пользователь не найден")
+		}
+		return nil, err
+	}
+
+	return user, nil
+}
+
+func (r *userRepository) UserExists(username string) (bool, error) {
+	query := `
+		SELECT EXISTS(
+			SELECT 1 FROM users WHERE username = $1
+		)`
+
+	var exists bool
+	err := r.db.QueryRow(query, username).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
+}
+
+func (r *userRepository) GetUserRole(userID int) (string, error) {
+	query := `
+		SELECT role
+		FROM users
+		WHERE id = $1`
+
+	var role string
+	err := r.db.QueryRow(query, userID).Scan(&role)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", errors.New("пользователь не найден")
+		}
+		return "", err
+	}
+
+	return role, nil
 }
 
 func (r *userRepository) Create(user *models.User) error {
@@ -56,34 +141,6 @@ func (r *userRepository) Create(user *models.User) error {
 	}
 
 	return nil
-}
-
-func (r *userRepository) GetByUsername(username string) (*models.User, error) {
-	query := `
-		SELECT id, username, email, password, role, created_at, updated_at, deleted_at
-		FROM users
-		WHERE username = $1 AND deleted_at IS NULL`
-
-	log.Printf("Executing query: %s with param: username=%s", query, username)
-
-	user := &models.User{}
-	err := r.db.QueryRow(query, username).Scan(
-		&user.ID,
-		&user.Username,
-		&user.Email,
-		&user.Password,
-		&user.Role,
-		&user.CreatedAt,
-		&user.UpdatedAt,
-		&user.DeletedAt,
-	)
-
-	if err != nil {
-		log.Printf("Error getting user by username: %v", err)
-		return nil, err
-	}
-
-	return user, nil
 }
 
 func (r *userRepository) GetByEmail(email string) (*models.User, error) {

@@ -1,81 +1,73 @@
 package main
 
 import (
-    "AuthService/internal/config"
-    "AuthService/internal/handler"
-    "AuthService/internal/repository"
-    "AuthService/internal/service"
-    "database/sql"
-    "fmt"
-    "log"
-    _ "github.com/lib/pq"
-    "github.com/gin-gonic/gin"
-    "github.com/gin-contrib/cors"
-    "time"
+	"AuthService/internal/repository"
+	"AuthService/internal/server"
+	"AuthService/internal/service"
+	"database/sql"
+	_"fmt"
+	"github.com/gin-gonic/gin"
+	_ "github.com/lib/pq"
+	"log"
 )
 
 func main() {
-    // Загрузка конфигурации
-    cfg, err := config.LoadConfig("config/config.yaml")
-    if err != nil {
-        log.Fatalf("Ошибка загрузки конфигурации: %v", err)
-    }
+	// Подключение к базе данных
+	dsn := "host=localhost user=postgres password=postgres dbname=forum port=5432 sslmode=disable"
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer db.Close()
 
-    // Подключение к базе данных
-    db, err := sql.Open("postgres", cfg.Database.GetDSN())
-    if err != nil {
-        log.Fatalf("Ошибка подключения к базе данных: %v", err)
-    }
-    defer db.Close()
+	// Проверка подключения
+	if err := db.Ping(); err != nil {
+		log.Fatalf("Failed to ping database: %v", err)
+	}
 
-    // Настройка пула соединений
-    db.SetMaxOpenConns(cfg.Database.MaxOpenConns)
-    db.SetMaxIdleConns(cfg.Database.MaxIdleConns)
-    db.SetConnMaxLifetime(cfg.Database.ConnMaxLifetime)
+	// Инициализация репозитория
+	userRepo := repository.NewUserRepository(db)
 
-    // Проверка подключения
-    if err := db.Ping(); err != nil {
-        log.Fatalf("Ошибка проверки подключения к базе данных: %v", err)
-    }
+	// Инициализация сервиса
+	authService := service.NewAuthService(userRepo)
 
-    // Инициализация репозитория
-    userRepo := repository.NewUserRepository(db)
+	// Запуск gRPC сервера в отдельной горутине
+	go func() {
+		if err := server.StartGRPCServer(authService, "50051"); err != nil {
+			log.Fatalf("Failed to start gRPC server: %v", err)
+		}
+	}()
 
-    // Инициализация сервиса
-    authService := service.NewAuthService(userRepo, cfg.JWT.SecretKey)
+	// Создание экземпляра Gin
+	r := gin.Default()
 
-    // Инициализация обработчиков
-    authHandler := handler.NewAuthHandler(authService)
-    templateHandler := handler.NewTemplateHandler("internal/templates")
+	// Настройка CORS
+	r.Use(func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "http://localhost:8080")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
 
-    // Создаём gin router
-    r := gin.Default()
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
 
-    // Настройка CORS
-    r.Use(cors.New(cors.Config{
-        AllowOrigins:     []string{"http://localhost:8081"},
-        AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-        AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "Cookie"},
-        ExposeHeaders:    []string{"Content-Length", "Set-Cookie"},
-        AllowCredentials: true,
-        MaxAge:           12 * time.Hour,
-    }))
+		c.Next()
+	})
 
-    // Настройка статических файлов
-    r.Static("/static", "./internal/templates")
+	// // Загрузка HTML шаблонов
+	// r.LoadHTMLGlob("templates/*")
+	// Настройка статических файлов
+	r.Static("/static", "./static")
 
-    // API маршруты
-    r.POST("/api/auth/register", authHandler.Register)
-    r.POST("/api/auth/login", authHandler.Login)
-    r.GET("/api/auth/validate", authHandler.ValidateToken)
-    r.POST("/api/auth/logout", authHandler.Logout)
+	// Инициализация обработчиков
+	authHandler := server.NewAuthHandler(authService)
 
-    // Маршруты для страниц
-    r.GET("/register", templateHandler.ServeRegisterPage)
-    r.GET("/login", templateHandler.ServeLoginPage)
+	// Маршруты для аутентификации
+	r.POST("/api/auth/register", authHandler.Register)
+	r.POST("/api/auth/login", authHandler.Login)
 
-    // Запуск сервера
-    serverAddr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
-    log.Printf("Сервер аутентификации запущен на %s", serverAddr)
-    log.Fatal(r.Run(serverAddr))
+	// Запуск HTTP сервера
+	log.Fatal(r.Run(":8082"))
 } 
