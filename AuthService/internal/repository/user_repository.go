@@ -139,5 +139,6 @@ func (r *userRepository) GetByID(id int) (*models.User, error) {
 		return nil, err
 	}
 
+	log.Printf("Debug - User role from database: %q\n", user.Role)
 	return user, nil
 } 

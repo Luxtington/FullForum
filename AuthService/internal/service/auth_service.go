@@ -116,16 +116,28 @@ func (s *authService) ValidateToken(tokenString string) (*models.User, error) {
 
     if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
         userID := int(claims["user_id"].(float64))
-        return s.userRepo.GetByID(userID)
+        user, err := s.userRepo.GetByID(userID)
+        if err != nil {
+            return nil, err
+        }
+        // Устанавливаем роль из токена
+        if role, ok := claims["role"].(string); ok {
+            log.Printf("Debug - Role from token: %q\n", role)
+            user.Role = role
+        }
+        log.Printf("Debug - User role after setting: %q\n", user.Role)
+        return user, nil
     }
 
     return nil, errors.New("недействительный токен")
 }
 
 func (s *authService) generateToken(user *models.User) (string, error) {
+    log.Printf("Debug - Generating token for user with role: %q\n", user.Role)
     token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
         "user_id":  user.ID,
         "username": user.Username,
+        "role":     user.Role,
         "exp":      time.Now().Add(time.Hour * 24 * 7).Unix(), // Токен действителен 7 дней
     })
 

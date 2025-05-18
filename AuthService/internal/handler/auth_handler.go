@@ -4,6 +4,7 @@ import (
     "AuthService/internal/models"
     "AuthService/internal/service"
     "github.com/gin-gonic/gin"
+    "log"
     "strings"
     "time"
 )
@@ -104,6 +105,8 @@ func (h *AuthHandler) ValidateToken(c *gin.Context) {
         c.JSON(401, gin.H{"error": err.Error()})
         return
     }
+
+    log.Printf("Debug - User role in ValidateToken handler: %q\n", user.Role)
     c.JSON(200, user)
 }
 
