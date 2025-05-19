@@ -1,0 +1,6 @@
+github.com/Luxtington/Shared v0.0.0-20250519090624-36710fc190c2 h1:xq1d5KkxjGbWWYpoaRK9jEmS0ClCYrYtUZ83DX95q/Y=
+github.com/Luxtington/Shared v0.0.0-20250519090624-36710fc190c2/go.mod h1:uzF5o4PzvgEPfaF/NdHPcKzVZYv3S3mSLEty8DJHn7M=
+go.uber.org/multierr v1.10.0 h1:S0h4aNzvfcFsC3dRF1jLoaov7oRaKqRGC/pUEJ2yvPQ=
+go.uber.org/multierr v1.10.0/go.mod h1:20+QtiLqy0Nd6FdQB9TLXag12DsQkrbs3htMFfDN80Y=
+go.uber.org/zap v1.27.0 h1:aJMhYGrd5QSmlpLMr2MftRKl7t8J8PTZPA732ud/XR8=
+go.uber.org/zap v1.27.0/go.mod h1:GB2qFLM7cTU87MWRP2mPIjqfIDnGu+VIO4V/SdhGo2E=
