@@ -49,6 +49,8 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
+	c.SetCookie("auth_token", token, 3600*24, "/", "", false, false)
+
 	c.JSON(http.StatusCreated, AuthResponse{
 		UserID:   user.ID,
 		Username: user.Username,
@@ -72,6 +74,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ошибка при входе"})
 		return
 	}
+
+	c.SetCookie("auth_token", token, 3600*24, "/", "", false, false)
 
 	c.JSON(http.StatusOK, AuthResponse{
 		UserID:   user.ID,

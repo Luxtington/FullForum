@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
 	"log"
+	"net/http"
 )
 
 func main() {
@@ -56,13 +57,22 @@ func main() {
 		c.Next()
 	})
 
-	// // Загрузка HTML шаблонов
-	// r.LoadHTMLGlob("templates/*")
+	// Загрузка HTML шаблонов
+	r.LoadHTMLGlob("internal/templates/*")
 	// Настройка статических файлов
 	r.Static("/static", "./static")
 
 	// Инициализация обработчиков
 	authHandler := server.NewAuthHandler(authService)
+
+	// Маршруты для аутентификации
+	r.GET("/register", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "register.html", nil)
+	})
+
+	r.GET("/login", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "login.html", nil)
+	})
 
 	// Маршруты для аутентификации
 	r.POST("/api/auth/register", authHandler.Register)

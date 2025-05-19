@@ -1,7 +1,7 @@
 package handler
 
 import (
-    "path/filepath"
+    _"path/filepath"
     "github.com/gin-gonic/gin"
 )
 
