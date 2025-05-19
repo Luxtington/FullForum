@@ -8,22 +8,26 @@ import (
 	_"fmt"
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
-	"log"
+	"github.com/Luxtington/Shared/logger"
+	"go.uber.org/zap"
 	"net/http"
 )
 
 func main() {
+	logger.InitLogger()
+	log := logger.GetLogger()
+
 	// Подключение к базе данных
 	dsn := "host=localhost user=postgres password=postgres dbname=forum port=5432 sslmode=disable"
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.Fatal("Failed to connect to database", zap.Error(err))
 	}
 	defer db.Close()
 
 	// Проверка подключения
 	if err := db.Ping(); err != nil {
-		log.Fatalf("Failed to ping database: %v", err)
+		log.Fatal("Failed to ping database", zap.Error(err))
 	}
 
 	// Инициализация репозитория
@@ -35,7 +39,7 @@ func main() {
 	// Запуск gRPC сервера в отдельной горутине
 	go func() {
 		if err := server.StartGRPCServer(authService, "50051"); err != nil {
-			log.Fatalf("Failed to start gRPC server: %v", err)
+			log.Fatal("Failed to start gRPC server", zap.Error(err))
 		}
 	}()
 
@@ -79,5 +83,7 @@ func main() {
 	r.POST("/api/auth/login", authHandler.Login)
 
 	// Запуск HTTP сервера
-	log.Fatal(r.Run(":8082"))
+	if err := r.Run(":8082"); err != nil {
+		log.Fatal("Failed to start HTTP server", zap.Error(err))
+	}
 } 

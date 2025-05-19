@@ -3,11 +3,12 @@ package repository
 import (
 	"database/sql"
 	"errors"
-	"log"
 	"time"
 
 	"AuthService/internal/models"
 	"golang.org/x/crypto/bcrypt"
+	"github.com/Luxtington/Shared/logger"
+	"go.uber.org/zap"
 )
 
 type UserRepository interface {
@@ -27,13 +28,25 @@ func NewUserRepository(db *sql.DB) UserRepository {
 }
 
 func (r *userRepository) CreateUser(user *models.User) error {
-	query := `
-		INSERT INTO users (username, password, role)
-		VALUES ($1, $2, $3)
-		RETURNING id`
-
-	err := r.db.QueryRow(query, user.Username, user.Password, user.Role).Scan(&user.ID)
+	log := logger.GetLogger()
+	
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
+		log.Error("Error hashing password", zap.Error(err))
+		return err
+	}
+
+	query := `INSERT INTO users (username, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id`
+	
+	log.Info("Executing query",
+		zap.String("query", query),
+		zap.String("username", user.Username),
+		zap.String("email", user.Email),
+		zap.String("role", user.Role))
+
+	err = r.db.QueryRow(query, user.Username, user.Email, string(hashedPassword), user.Role).Scan(&user.ID)
+	if err != nil {
+		log.Error("Error creating user", zap.Error(err))
 		return err
 	}
 
@@ -110,10 +123,11 @@ func (r *userRepository) GetUserRole(userID int) (string, error) {
 }
 
 func (r *userRepository) Create(user *models.User) error {
-	// Хешируем пароль перед сохранением
+	log := logger.GetLogger()
+	
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
-		log.Printf("Error hashing password: %v", err)
+		log.Error("Error hashing password", zap.Error(err))
 		return err
 	}
 
@@ -122,21 +136,24 @@ func (r *userRepository) Create(user *models.User) error {
 		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id, created_at, updated_at`
 
-	log.Printf("Executing query: %s with params: username=%s, email=%s, role=%s", 
-		query, user.Username, user.Email, user.Role)
+	log.Info("Executing query",
+		zap.String("query", query),
+		zap.String("username", user.Username),
+		zap.String("email", user.Email),
+		zap.String("role", user.Role))
 
 	err = r.db.QueryRow(
 		query,
 		user.Username,
 		user.Email,
-		string(hashedPassword), // Сохраняем хешированный пароль
+		string(hashedPassword),
 		user.Role,
 		time.Now(),
 		time.Now(),
 	).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
 
 	if err != nil {
-		log.Printf("Error creating user: %v", err)
+		log.Error("Error creating user", zap.Error(err))
 		return err
 	}
 
@@ -144,12 +161,16 @@ func (r *userRepository) Create(user *models.User) error {
 }
 
 func (r *userRepository) GetByEmail(email string) (*models.User, error) {
+	log := logger.GetLogger()
+	
 	query := `
 		SELECT id, username, email, password, role, created_at, updated_at, deleted_at
 		FROM users
 		WHERE email = $1 AND deleted_at IS NULL`
 
-	log.Printf("Executing query: %s with param: email=%s", query, email)
+	log.Info("Executing query",
+		zap.String("query", query),
+		zap.String("email", email))
 
 	user := &models.User{}
 	err := r.db.QueryRow(query, email).Scan(
@@ -164,7 +185,7 @@ func (r *userRepository) GetByEmail(email string) (*models.User, error) {
 	)
 
 	if err != nil {
-		log.Printf("Error getting user by email: %v", err)
+		log.Error("Error getting user by email", zap.Error(err))
 		return nil, err
 	}
 
@@ -172,12 +193,16 @@ func (r *userRepository) GetByEmail(email string) (*models.User, error) {
 }
 
 func (r *userRepository) GetByID(id int) (*models.User, error) {
+	log := logger.GetLogger()
+	
 	query := `
 		SELECT id, username, email, password, role, created_at, updated_at, deleted_at
 		FROM users
 		WHERE id = $1 AND deleted_at IS NULL`
 
-	log.Printf("Executing query: %s with param: id=%d", query, id)
+	log.Info("Executing query",
+		zap.String("query", query),
+		zap.Int("id", id))
 
 	user := &models.User{}
 	err := r.db.QueryRow(query, id).Scan(
@@ -192,10 +217,10 @@ func (r *userRepository) GetByID(id int) (*models.User, error) {
 	)
 
 	if err != nil {
-		log.Printf("Error getting user by ID: %v", err)
+		log.Error("Error getting user by ID", zap.Error(err))
 		return nil, err
 	}
 
-	log.Printf("Debug - User role from database: %q\n", user.Role)
+	log.Info("User role from database", zap.String("role", user.Role))
 	return user, nil
 } 

@@ -4,6 +4,8 @@ import (
     "AuthService/internal/models"
     "AuthService/internal/service"
     "github.com/gin-gonic/gin"
+    "github.com/Luxtington/Shared/logger"
+    "go.uber.org/zap"
     "log"
     "strings"
     "time"
@@ -106,7 +108,8 @@ func (h *AuthHandler) ValidateToken(c *gin.Context) {
         return
     }
 
-    log.Printf("Debug - User role in ValidateToken handler: %q\n", user.Role)
+    log := logger.GetLogger()
+    log.Info("User role in ValidateToken handler", zap.String("role", user.Role))
     c.JSON(200, user)
 }
 

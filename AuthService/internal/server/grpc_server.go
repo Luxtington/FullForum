@@ -4,8 +4,9 @@ import (
 	"AuthService/internal/service"
 	"AuthService/proto"
 	"context"
+	"github.com/Luxtington/Shared/logger"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
-	"log"
 	"net"
 )
 
@@ -60,6 +61,8 @@ func (s *GRPCServer) Login(ctx context.Context, req *proto.LoginRequest) (*proto
 }
 
 func StartGRPCServer(authService *service.AuthService, port string) error {
+	log := logger.GetLogger()
+	
 	lis, err := net.Listen("tcp", ":"+port)
 	if err != nil {
 		return err
@@ -68,6 +71,6 @@ func StartGRPCServer(authService *service.AuthService, port string) error {
 	grpcServer := grpc.NewServer()
 	proto.RegisterAuthServiceServer(grpcServer, NewGRPCServer(authService))
 
-	log.Printf("Starting gRPC server on port %s", port)
+	log.Info("Starting gRPC server", zap.String("port", port))
 	return grpcServer.Serve(lis)
 } 
