@@ -6,16 +6,15 @@ import (
     "github.com/gin-gonic/gin"
     "github.com/Luxtington/Shared/logger"
     "go.uber.org/zap"
-    "log"
     "strings"
     "time"
 )
 
 type AuthHandler struct {
-    authService service.AuthService
+    authService service.IAuthService
 }
 
-func NewAuthHandler(authService service.AuthService) *AuthHandler {
+func NewAuthHandler(authService service.IAuthService) *AuthHandler {
     return &AuthHandler{
         authService: authService,
     }
@@ -27,7 +26,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
         c.JSON(400, gin.H{"error": "неверный формат данных"})
         return
     }
-    response, err := h.authService.Register(&req)
+    user, token, err := h.authService.Register(req.Username, req.Password)
     if err != nil {
         c.JSON(400, gin.H{"error": err.Error()})
         return
@@ -36,7 +35,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
     // Устанавливаем куки с токеном
     c.SetCookie(
         "auth_token",
-        response.Token,
+        token,
         int(time.Hour*24*7), // 7 дней
         "/",
         "localhost",  // Устанавливаем домен localhost
@@ -45,7 +44,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
     )
     
     c.JSON(200, gin.H{
-        "user": response.User,
+        "user": user,
         "redirect_url": "http://localhost:8081",
     })
 }
@@ -56,7 +55,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
         c.JSON(400, gin.H{"error": "неверный формат данных"})
         return
     }
-    response, err := h.authService.Login(&req)
+    user, token, err := h.authService.Login(req.Username, req.Password)
     if err != nil {
         c.JSON(401, gin.H{"error": err.Error()})
         return
@@ -65,7 +64,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
     // Устанавливаем куки с токеном
     c.SetCookie(
         "auth_token",
-        response.Token,
+        token,
         int(time.Hour*24*7), // 7 дней
         "/",
         "localhost",  // Устанавливаем домен localhost
@@ -74,8 +73,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
     )
     
     c.JSON(200, gin.H{
-        "user": response.User,
-        "token": response.Token,
+        "user": user,
+        "token": token,
         "redirect_url": "http://localhost:8081",
     })
 }

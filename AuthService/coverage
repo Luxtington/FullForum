@@ -1,0 +1,18 @@
+mode: set
+AuthService/cmd/main.go:16.13,23.16 5 0
+AuthService/cmd/main.go:23.16,25.3 1 0
+AuthService/cmd/main.go:26.2,29.34 2 0
+AuthService/cmd/main.go:29.34,31.3 1 0
+AuthService/cmd/main.go:34.2,40.12 3 0
+AuthService/cmd/main.go:40.12,41.70 1 0
+AuthService/cmd/main.go:41.70,43.4 1 0
+AuthService/cmd/main.go:47.2,50.29 2 0
+AuthService/cmd/main.go:50.29,56.36 5 0
+AuthService/cmd/main.go:56.36,59.4 2 0
+AuthService/cmd/main.go:61.3,61.11 1 0
+AuthService/cmd/main.go:65.2,73.42 4 0
+AuthService/cmd/main.go:73.42,75.3 1 0
+AuthService/cmd/main.go:77.2,77.39 1 0
+AuthService/cmd/main.go:77.39,79.3 1 0
+AuthService/cmd/main.go:82.2,86.39 3 0
+AuthService/cmd/main.go:86.39,88.3 1 0
