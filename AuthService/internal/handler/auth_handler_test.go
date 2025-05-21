@@ -3,13 +3,11 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"AuthService/internal/models"
-	"AuthService/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -19,8 +17,8 @@ type MockAuthService struct {
 	mock.Mock
 }
 
-func (m *MockAuthService) Register(username, password string) (*models.User, string, error) {
-	args := m.Called(username, password)
+func (m *MockAuthService) Register(username, email, password string) (*models.User, string, error) {
+	args := m.Called(username, email, password)
 	if args.Get(0) == nil {
 		return nil, "", args.Error(2)
 	}
@@ -66,12 +64,12 @@ func TestRegister_Success(t *testing.T) {
 	}
 	expectedToken := "test-token"
 
-	mockService.On("Register", "testuser", "password123").Return(expectedUser, expectedToken, nil)
+	mockService.On("Register", "testuser", "test@example.com", "password123").Return(expectedUser, expectedToken, nil)
 
 	// Создание тестового запроса
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest("POST", "/register", bytes.NewBufferString(`{"username": "testuser", "password": "password123"}`))
+	c.Request = httptest.NewRequest("POST", "/register", bytes.NewBufferString(`{"username": "testuser", "email": "test@example.com", "password": "password123"}`))
 
 	// Выполнение запроса
 	handler.Register(c)
@@ -125,12 +123,12 @@ func TestRegister_Error(t *testing.T) {
 	mockService := new(MockAuthService)
 	handler := NewAuthHandler(mockService)
 
-	mockService.On("Register", "testuser", "password123").Return(nil, "", assert.AnError)
+	mockService.On("Register", "testuser", "test@example.com", "password123").Return(nil, "", assert.AnError)
 
 	// Создание тестового запроса
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest("POST", "/register", bytes.NewBufferString(`{"username": "testuser", "password": "password123"}`))
+	c.Request = httptest.NewRequest("POST", "/register", bytes.NewBufferString(`{"username": "testuser", "email": "test@example.com", "password": "password123"}`))
 
 	// Выполнение запроса
 	handler.Register(c)

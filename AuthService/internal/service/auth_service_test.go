@@ -45,9 +45,10 @@ func TestRegister_Success(t *testing.T) {
 		},
 	}
 	svc := NewAuthService(repo)
-	user, token, err := svc.Register("testuser", "password123")
+	user, token, err := svc.Register("testuser", "test@example.com", "password123")
 	assert.NoError(t, err)
 	assert.Equal(t, "testuser", user.Username)
+	assert.Equal(t, "test@example.com", user.Email)
 	assert.NotEmpty(t, token)
 }
 
@@ -56,7 +57,7 @@ func TestRegister_UserExists(t *testing.T) {
 		UserExistsFunc: func(username string) (bool, error) { return true, nil },
 	}
 	svc := NewAuthService(repo)
-	user, token, err := svc.Register("testuser", "password123")
+	user, token, err := svc.Register("testuser", "test@example.com", "password123")
 	assert.ErrorIs(t, err, ErrUserAlreadyExists)
 	assert.Nil(t, user)
 	assert.Empty(t, token)
@@ -68,7 +69,7 @@ func TestRegister_CreateUserError(t *testing.T) {
 		CreateUserFunc: func(user *models.User) error { return errors.New("db error") },
 	}
 	svc := NewAuthService(repo)
-	user, token, err := svc.Register("testuser", "password123")
+	user, token, err := svc.Register("testuser", "test@example.com", "password123")
 	assert.Error(t, err)
 	assert.Nil(t, user)
 	assert.Empty(t, token)

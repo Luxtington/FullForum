@@ -68,14 +68,15 @@ func TestGetUserByID(t *testing.T) {
 	expectedUser := &models.User{
 		ID:       1,
 		Username: "testuser",
+		Email:    "test@example.com",
 		Password: "hashedpassword",
 		Role:     "user",
 	}
 
-	mock.ExpectQuery("SELECT id, username, password, role").
+	mock.ExpectQuery("SELECT id, username, email, password, role").
 		WithArgs(1).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "username", "password", "role"}).
-			AddRow(expectedUser.ID, expectedUser.Username, expectedUser.Password, expectedUser.Role))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "username", "email", "password", "role"}).
+			AddRow(expectedUser.ID, expectedUser.Username, expectedUser.Email, expectedUser.Password, expectedUser.Role))
 
 	user, err := repo.GetUserByID(1)
 	assert.NoError(t, err)
@@ -87,7 +88,7 @@ func TestGetUserByID_NotFound(t *testing.T) {
 	db, mock, repo := setupTestDB(t)
 	defer db.Close()
 
-	mock.ExpectQuery("SELECT id, username, password, role").
+	mock.ExpectQuery("SELECT id, username, email, password, role").
 		WithArgs(1).
 		WillReturnError(sql.ErrNoRows)
 
@@ -102,7 +103,7 @@ func TestGetUserByID_Error(t *testing.T) {
 	db, mock, repo := setupTestDB(t)
 	defer db.Close()
 
-	mock.ExpectQuery("SELECT id, username, password, role").
+	mock.ExpectQuery("SELECT id, username, email, password, role").
 		WithArgs(1).
 		WillReturnError(sql.ErrConnDone)
 
@@ -120,14 +121,15 @@ func TestGetUserByUsername(t *testing.T) {
 	expectedUser := &models.User{
 		ID:       1,
 		Username: "testuser",
+		Email:    "test@example.com",
 		Password: "hashedpassword",
 		Role:     "user",
 	}
 
-	mock.ExpectQuery("SELECT id, username, password, role").
+	mock.ExpectQuery("SELECT id, username, email, password, role").
 		WithArgs("testuser").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "username", "password", "role"}).
-			AddRow(expectedUser.ID, expectedUser.Username, expectedUser.Password, expectedUser.Role))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "username", "email", "password", "role"}).
+			AddRow(expectedUser.ID, expectedUser.Username, expectedUser.Email, expectedUser.Password, expectedUser.Role))
 
 	user, err := repo.GetUserByUsername("testuser")
 	assert.NoError(t, err)
@@ -139,7 +141,7 @@ func TestGetUserByUsername_NotFound(t *testing.T) {
 	db, mock, repo := setupTestDB(t)
 	defer db.Close()
 
-	mock.ExpectQuery("SELECT id, username, password, role").
+	mock.ExpectQuery("SELECT id, username, email, password, role").
 		WithArgs("testuser").
 		WillReturnError(sql.ErrNoRows)
 
@@ -154,7 +156,7 @@ func TestGetUserByUsername_Error(t *testing.T) {
 	db, mock, repo := setupTestDB(t)
 	defer db.Close()
 
-	mock.ExpectQuery("SELECT id, username, password, role").
+	mock.ExpectQuery("SELECT id, username, email, password, role").
 		WithArgs("testuser").
 		WillReturnError(sql.ErrConnDone)
 

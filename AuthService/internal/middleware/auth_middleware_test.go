@@ -8,14 +8,20 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 type mockAuthService struct {
+	mock.Mock
 	ValidateTokenFunc func(token string) (*models.User, error)
 }
 
-func (m *mockAuthService) Register(username, password string) (*models.User, string, error) {
-	return nil, "", nil
+func (m *mockAuthService) Register(username, email, password string) (*models.User, string, error) {
+	args := m.Called(username, email, password)
+	if args.Get(0) == nil {
+		return nil, "", args.Error(2)
+	}
+	return args.Get(0).(*models.User), args.String(1), args.Error(2)
 }
 
 func (m *mockAuthService) Login(username, password string) (*models.User, string, error) {
