@@ -12,26 +12,35 @@ import (
 	"AuthService/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
-type mockAuthService struct {
-	RegisterFunc      func(username, password string) (*models.User, string, error)
-	LoginFunc         func(username, password string) (*models.User, string, error)
-	ValidateTokenFunc func(token string) (*models.User, error)
+type MockAuthService struct {
+	mock.Mock
 }
 
-var _ service.IAuthService = (*mockAuthService)(nil)
-
-func (m *mockAuthService) Register(username, password string) (*models.User, string, error) {
-	return m.RegisterFunc(username, password)
+func (m *MockAuthService) Register(username, password string) (*models.User, string, error) {
+	args := m.Called(username, password)
+	if args.Get(0) == nil {
+		return nil, "", args.Error(2)
+	}
+	return args.Get(0).(*models.User), args.String(1), args.Error(2)
 }
 
-func (m *mockAuthService) Login(username, password string) (*models.User, string, error) {
-	return m.LoginFunc(username, password)
+func (m *MockAuthService) Login(username, password string) (*models.User, string, error) {
+	args := m.Called(username, password)
+	if args.Get(0) == nil {
+		return nil, "", args.Error(2)
+	}
+	return args.Get(0).(*models.User), args.String(1), args.Error(2)
 }
 
-func (m *mockAuthService) ValidateToken(token string) (*models.User, error) {
-	return m.ValidateTokenFunc(token)
+func (m *MockAuthService) ValidateToken(token string) (*models.User, error) {
+	args := m.Called(token)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.User), args.Error(1)
 }
 
 func setupRouter(handler *AuthHandler) *gin.Engine {
@@ -45,228 +54,297 @@ func setupRouter(handler *AuthHandler) *gin.Engine {
 }
 
 func TestRegister_Success(t *testing.T) {
-	mockService := &mockAuthService{
-		RegisterFunc: func(username, password string) (*models.User, string, error) {
-			return &models.User{
-				ID:       1,
-				Username: username,
-				Email:    "test@mail.com",
-				Role:     "user",
-			}, "token123", nil
-		},
-	}
-	h := NewAuthHandler(mockService)
-	r := setupRouter(h)
+	// Настройка
+	gin.SetMode(gin.TestMode)
+	mockService := new(MockAuthService)
+	handler := NewAuthHandler(mockService)
 
-	body := models.RegisterRequest{
-		Username: "test",
-		Email:    "test@mail.com",
-		Password: "1234",
+	expectedUser := &models.User{
+		ID:       1,
+		Username: "testuser",
+		Email:    "test@example.com",
 	}
-	jsonBody, _ := json.Marshal(body)
+	expectedToken := "test-token"
+
+	mockService.On("Register", "testuser", "password123").Return(expectedUser, expectedToken, nil)
+
+	// Создание тестового запроса
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/register", bytes.NewBuffer(jsonBody))
-	req.Header.Set("Content-Type", "application/json")
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("POST", "/register", bytes.NewBufferString(`{"username": "testuser", "password": "password123"}`))
 
-	r.ServeHTTP(w, req)
-	assert.Equal(t, 200, w.Code)
-	assert.Contains(t, w.Body.String(), "test@mail.com")
-	cookie := w.Header().Get("Set-Cookie")
-	assert.Contains(t, cookie, "auth_token=token123")
+	// Выполнение запроса
+	handler.Register(c)
+
+	// Проверки
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	
+	user := response["user"].(map[string]interface{})
+	assert.Equal(t, float64(1), user["id"])
+	assert.Equal(t, "testuser", user["username"])
+	assert.Equal(t, "test@example.com", user["email"])
+	assert.Equal(t, "http://localhost:8081", response["redirect_url"])
+
+	// Проверка куки
+	cookies := w.Result().Cookies()
+	assert.Len(t, cookies, 1)
+	assert.Equal(t, "auth_token", cookies[0].Name)
+	assert.Equal(t, expectedToken, cookies[0].Value)
 }
 
-func TestRegister_BadRequest(t *testing.T) {
-	mockService := &mockAuthService{}
-	h := NewAuthHandler(mockService)
-	r := setupRouter(h)
+func TestRegister_InvalidData(t *testing.T) {
+	// Настройка
+	gin.SetMode(gin.TestMode)
+	mockService := new(MockAuthService)
+	handler := NewAuthHandler(mockService)
 
+	// Создание тестового запроса
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/register", bytes.NewBuffer([]byte("bad json")))
-	req.Header.Set("Content-Type", "application/json")
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("POST", "/register", bytes.NewBufferString(`{"invalid": "data"}`))
 
-	r.ServeHTTP(w, req)
-	assert.Equal(t, 400, w.Code)
-	assert.Contains(t, w.Body.String(), "неверный формат данных")
+	// Выполнение запроса
+	handler.Register(c)
+
+	// Проверки
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "неверный формат данных", response["error"])
 }
 
-func TestRegister_ServiceError(t *testing.T) {
-	mockService := &mockAuthService{
-		RegisterFunc: func(username, password string) (*models.User, string, error) {
-			return nil, "", errors.New("ошибка регистрации")
-		},
-	}
-	h := NewAuthHandler(mockService)
-	r := setupRouter(h)
+func TestRegister_Error(t *testing.T) {
+	// Настройка
+	gin.SetMode(gin.TestMode)
+	mockService := new(MockAuthService)
+	handler := NewAuthHandler(mockService)
 
-	body := models.RegisterRequest{
-		Username: "test",
-		Email:    "test@mail.com",
-		Password: "1234",
-	}
-	jsonBody, _ := json.Marshal(body)
+	mockService.On("Register", "testuser", "password123").Return(nil, "", assert.AnError)
+
+	// Создание тестового запроса
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/register", bytes.NewBuffer(jsonBody))
-	req.Header.Set("Content-Type", "application/json")
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("POST", "/register", bytes.NewBufferString(`{"username": "testuser", "password": "password123"}`))
 
-	r.ServeHTTP(w, req)
-	assert.Equal(t, 400, w.Code)
-	assert.Contains(t, w.Body.String(), "ошибка регистрации")
+	// Выполнение запроса
+	handler.Register(c)
+
+	// Проверки
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, assert.AnError.Error(), response["error"])
 }
 
 func TestLogin_Success(t *testing.T) {
-	mockService := &mockAuthService{
-		LoginFunc: func(username, password string) (*models.User, string, error) {
-			return &models.User{
-				ID:       2,
-				Username: username,
-				Email:    "user@mail.com",
-				Role:     "user",
-			}, "token456", nil
-		},
-	}
-	h := NewAuthHandler(mockService)
-	r := setupRouter(h)
+	// Настройка
+	gin.SetMode(gin.TestMode)
+	mockService := new(MockAuthService)
+	handler := NewAuthHandler(mockService)
 
-	body := models.LoginRequest{
-		Username: "user",
-		Password: "pass",
+	expectedUser := &models.User{
+		ID:       1,
+		Username: "testuser",
+		Email:    "test@example.com",
 	}
-	jsonBody, _ := json.Marshal(body)
+	expectedToken := "test-token"
+
+	mockService.On("Login", "testuser", "password123").Return(expectedUser, expectedToken, nil)
+
+	// Создание тестового запроса
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/login", bytes.NewBuffer(jsonBody))
-	req.Header.Set("Content-Type", "application/json")
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(`{"username": "testuser", "password": "password123"}`))
 
-	r.ServeHTTP(w, req)
-	assert.Equal(t, 200, w.Code)
-	assert.Contains(t, w.Body.String(), "token456")
-	assert.Contains(t, w.Body.String(), "user@mail.com")
+	// Выполнение запроса
+	handler.Login(c)
+
+	// Проверки
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	
+	user := response["user"].(map[string]interface{})
+	assert.Equal(t, float64(1), user["id"])
+	assert.Equal(t, "testuser", user["username"])
+	assert.Equal(t, "test@example.com", user["email"])
+	assert.Equal(t, expectedToken, response["token"])
+	assert.Equal(t, "http://localhost:8081", response["redirect_url"])
+
+	// Проверка куки
+	cookies := w.Result().Cookies()
+	assert.Len(t, cookies, 1)
+	assert.Equal(t, "auth_token", cookies[0].Name)
+	assert.Equal(t, expectedToken, cookies[0].Value)
 }
 
-func TestLogin_BadRequest(t *testing.T) {
-	mockService := &mockAuthService{}
-	h := NewAuthHandler(mockService)
-	r := setupRouter(h)
+func TestLogin_InvalidData(t *testing.T) {
+	// Настройка
+	gin.SetMode(gin.TestMode)
+	mockService := new(MockAuthService)
+	handler := NewAuthHandler(mockService)
 
+	// Создание тестового запроса
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/login", bytes.NewBuffer([]byte("bad json")))
-	req.Header.Set("Content-Type", "application/json")
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(`{"invalid": "data"}`))
 
-	r.ServeHTTP(w, req)
-	assert.Equal(t, 400, w.Code)
-	assert.Contains(t, w.Body.String(), "неверный формат данных")
+	// Выполнение запроса
+	handler.Login(c)
+
+	// Проверки
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "неверный формат данных", response["error"])
 }
 
-func TestLogin_ServiceError(t *testing.T) {
-	mockService := &mockAuthService{
-		LoginFunc: func(username, password string) (*models.User, string, error) {
-			return nil, "", errors.New("ошибка входа")
-		},
-	}
-	h := NewAuthHandler(mockService)
-	r := setupRouter(h)
+func TestLogin_Error(t *testing.T) {
+	// Настройка
+	gin.SetMode(gin.TestMode)
+	mockService := new(MockAuthService)
+	handler := NewAuthHandler(mockService)
 
-	body := models.LoginRequest{
-		Username: "user",
-		Password: "pass",
-	}
-	jsonBody, _ := json.Marshal(body)
+	mockService.On("Login", "testuser", "password123").Return(nil, "", assert.AnError)
+
+	// Создание тестового запроса
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/login", bytes.NewBuffer(jsonBody))
-	req.Header.Set("Content-Type", "application/json")
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(`{"username": "testuser", "password": "password123"}`))
 
-	r.ServeHTTP(w, req)
-	assert.Equal(t, 401, w.Code)
-	assert.Contains(t, w.Body.String(), "ошибка входа")
+	// Выполнение запроса
+	handler.Login(c)
+
+	// Проверки
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, assert.AnError.Error(), response["error"])
 }
 
-func TestValidateToken_Header_Success(t *testing.T) {
-	mockService := &mockAuthService{
-		ValidateTokenFunc: func(token string) (*models.User, error) {
-			return &models.User{
-				ID:       3,
-				Username: "tokuser",
-				Email:    "tok@mail.com",
-				Role:     "admin",
-			}, nil
-		},
+func TestValidateToken_Success(t *testing.T) {
+	// Настройка
+	gin.SetMode(gin.TestMode)
+	mockService := new(MockAuthService)
+	handler := NewAuthHandler(mockService)
+
+	expectedUser := &models.User{
+		ID:       1,
+		Username: "testuser",
+		Email:    "test@example.com",
 	}
-	h := NewAuthHandler(mockService)
-	r := setupRouter(h)
 
+	mockService.On("ValidateToken", "test-token").Return(expectedUser, nil)
+
+	// Создание тестового запроса
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/validate", nil)
-	req.Header.Set("Authorization", "Bearer testtoken")
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/validate", nil)
+	c.Request.Header.Set("Authorization", "Bearer test-token")
 
-	r.ServeHTTP(w, req)
-	assert.Equal(t, 200, w.Code)
-	assert.Contains(t, w.Body.String(), "tokuser")
-	assert.Contains(t, w.Body.String(), "admin")
-}
+	// Выполнение запроса
+	handler.ValidateToken(c)
 
-func TestValidateToken_Cookie_Success(t *testing.T) {
-	mockService := &mockAuthService{
-		ValidateTokenFunc: func(token string) (*models.User, error) {
-			return &models.User{
-				ID:       4,
-				Username: "cookieuser",
-				Email:    "cookie@mail.com",
-				Role:     "user",
-			}, nil
-		},
-	}
-	h := NewAuthHandler(mockService)
-	r := setupRouter(h)
+	// Проверки
+	assert.Equal(t, http.StatusOK, w.Code)
 
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/validate", nil)
-	req.AddCookie(&http.Cookie{Name: "auth_token", Value: "cookietoken"})
-
-	r.ServeHTTP(w, req)
-	assert.Equal(t, 200, w.Code)
-	assert.Contains(t, w.Body.String(), "cookieuser")
-	assert.Contains(t, w.Body.String(), "user")
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, float64(1), response["id"])
+	assert.Equal(t, "testuser", response["username"])
+	assert.Equal(t, "test@example.com", response["email"])
 }
 
 func TestValidateToken_NoToken(t *testing.T) {
-	mockService := &mockAuthService{}
-	h := NewAuthHandler(mockService)
-	r := setupRouter(h)
+	// Настройка
+	gin.SetMode(gin.TestMode)
+	mockService := new(MockAuthService)
+	handler := NewAuthHandler(mockService)
 
+	// Создание тестового запроса
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/validate", nil)
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/validate", nil)
 
-	r.ServeHTTP(w, req)
-	assert.Equal(t, 401, w.Code)
-	assert.Contains(t, w.Body.String(), "токен не предоставлен")
+	// Выполнение запроса
+	handler.ValidateToken(c)
+
+	// Проверки
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "токен не предоставлен", response["error"])
 }
 
-func TestValidateToken_ServiceError(t *testing.T) {
-	mockService := &mockAuthService{
-		ValidateTokenFunc: func(token string) (*models.User, error) {
-			return nil, errors.New("недействительный токен")
-		},
-	}
-	h := NewAuthHandler(mockService)
-	r := setupRouter(h)
+func TestValidateToken_InvalidToken(t *testing.T) {
+	// Настройка
+	gin.SetMode(gin.TestMode)
+	mockService := new(MockAuthService)
+	handler := NewAuthHandler(mockService)
 
+	mockService.On("ValidateToken", "invalid-token").Return(nil, assert.AnError)
+
+	// Создание тестового запроса
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/validate", nil)
-	req.Header.Set("Authorization", "Bearer badtoken")
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/validate", nil)
+	c.Request.Header.Set("Authorization", "Bearer invalid-token")
 
-	r.ServeHTTP(w, req)
-	assert.Equal(t, 401, w.Code)
-	assert.Contains(t, w.Body.String(), "недействительный токен")
+	// Выполнение запроса
+	handler.ValidateToken(c)
+
+	// Проверки
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, assert.AnError.Error(), response["error"])
 }
 
-func TestLogout(t *testing.T) {
-	mockService := &mockAuthService{}
-	h := NewAuthHandler(mockService)
-	r := setupRouter(h)
+func TestLogout_Success(t *testing.T) {
+	// Настройка
+	gin.SetMode(gin.TestMode)
+	mockService := new(MockAuthService)
+	handler := NewAuthHandler(mockService)
 
+	// Создание тестового запроса
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/logout", nil)
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("POST", "/logout", nil)
 
-	r.ServeHTTP(w, req)
-	assert.Equal(t, 200, w.Code)
-	assert.Contains(t, w.Body.String(), "успешный выход")
+	// Выполнение запроса
+	handler.Logout(c)
+
+	// Проверки
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "успешный выход", response["message"])
+
+	// Проверка куки
+	cookies := w.Result().Cookies()
+	assert.Len(t, cookies, 1)
+	assert.Equal(t, "auth_token", cookies[0].Name)
+	assert.Equal(t, "", cookies[0].Value)
+	assert.Equal(t, -1, cookies[0].MaxAge)
 } 

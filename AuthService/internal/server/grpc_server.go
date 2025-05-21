@@ -35,7 +35,7 @@ func (s *GRPCServer) ValidateToken(ctx context.Context, req *proto.ValidateToken
 }
 
 func (s *GRPCServer) Register(ctx context.Context, req *proto.RegisterRequest) (*proto.RegisterResponse, error) {
-	user, token, err := s.authService.Register(req.Username, req.Password)
+	user, token, err := s.authService.Register(req.Username, req.Email, req.Password)
 	if err != nil {
 		return nil, err
 	}

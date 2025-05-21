@@ -121,7 +121,10 @@
                 const result = await response.json();
                 
                 if (response.ok) {
-                    window.location.href = result.redirect_url;
+                    // Сохраняем токен в куки
+                    document.cookie = `auth_token=${result.token}; path=/`;
+                    // Перенаправляем на главную страницу форума
+                    window.location.href = result.redirect_url || 'http://localhost:8081';
                 } else {
                     errorDiv.textContent = result.error || 'Произошла ошибка при регистрации';
                 }

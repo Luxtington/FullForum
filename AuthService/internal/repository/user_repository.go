@@ -30,12 +30,6 @@ func NewUserRepository(db *sql.DB) UserRepository {
 func (r *userRepository) CreateUser(user *models.User) error {
 	log := logger.GetLogger()
 	
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
-	if err != nil {
-		log.Error("Error hashing password", zap.Error(err))
-		return err
-	}
-
 	query := `INSERT INTO users (username, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id`
 	
 	log.Info("Executing query",
@@ -44,7 +38,7 @@ func (r *userRepository) CreateUser(user *models.User) error {
 		zap.String("email", user.Email),
 		zap.String("role", user.Role))
 
-	err = r.db.QueryRow(query, user.Username, user.Email, string(hashedPassword), user.Role).Scan(&user.ID)
+	err := r.db.QueryRow(query, user.Username, user.Email, user.Password, user.Role).Scan(&user.ID)
 	if err != nil {
 		log.Error("Error creating user", zap.Error(err))
 		return err
@@ -55,12 +49,12 @@ func (r *userRepository) CreateUser(user *models.User) error {
 
 func (r *userRepository) GetUserByID(id int) (*models.User, error) {
 	query := `
-		SELECT id, username, password, role
+		SELECT id, username, email, password, role
 		FROM users
 		WHERE id = $1`
 
 	user := &models.User{}
-	err := r.db.QueryRow(query, id).Scan(&user.ID, &user.Username, &user.Password, &user.Role)
+	err := r.db.QueryRow(query, id).Scan(&user.ID, &user.Username, &user.Email, &user.Password, &user.Role)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, errors.New("пользователь не найден")
@@ -73,12 +67,12 @@ func (r *userRepository) GetUserByID(id int) (*models.User, error) {
 
 func (r *userRepository) GetUserByUsername(username string) (*models.User, error) {
 	query := `
-		SELECT id, username, password, role
+		SELECT id, username, email, password, role
 		FROM users
 		WHERE username = $1`
 
 	user := &models.User{}
-	err := r.db.QueryRow(query, username).Scan(&user.ID, &user.Username, &user.Password, &user.Role)
+	err := r.db.QueryRow(query, username).Scan(&user.ID, &user.Username, &user.Email, &user.Password, &user.Role)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, errors.New("пользователь не найден")

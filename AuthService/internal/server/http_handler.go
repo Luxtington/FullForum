@@ -18,6 +18,7 @@ func NewAuthHandler(authService *service.AuthService) *AuthHandler {
 
 type RegisterRequest struct {
 	Username string `json:"username" binding:"required"`
+	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
 }
 
@@ -35,11 +36,11 @@ type AuthResponse struct {
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "неверный формат данных"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	user, token, err := h.authService.Register(req.Username, req.Password)
+	user, token, err := h.authService.Register(req.Username, req.Email, req.Password)
 	if err != nil {
 		if err == service.ErrUserAlreadyExists {
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})

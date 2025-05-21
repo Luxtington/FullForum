@@ -26,7 +26,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
         c.JSON(400, gin.H{"error": "неверный формат данных"})
         return
     }
-    user, token, err := h.authService.Register(req.Username, req.Password)
+    user, token, err := h.authService.Register(req.Username, req.Email, req.Password)
     if err != nil {
         c.JSON(400, gin.H{"error": err.Error()})
         return
@@ -46,6 +46,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
     c.JSON(200, gin.H{
         "user": user,
         "redirect_url": "http://localhost:8081",
+        "token": token,
     })
 }
 

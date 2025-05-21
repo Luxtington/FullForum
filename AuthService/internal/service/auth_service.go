@@ -28,7 +28,7 @@ func NewAuthService(userRepo repository.UserRepository) *AuthService {
 	}
 }
 
-func (s *AuthService) Register(username, password string) (*models.User, string, error) {
+func (s *AuthService) Register(username, email, password string) (*models.User, string, error) {
 	// Проверяем, существует ли пользователь
 	exists, err := s.userRepo.UserExists(username)
 	if err != nil {
@@ -47,6 +47,7 @@ func (s *AuthService) Register(username, password string) (*models.User, string,
 	// Создаем пользователя
 	user := &models.User{
 		Username: username,
+		Email:    email,
 		Password: string(hashedPassword),
 		Role:     "user", // По умолчанию обычный пользователь
 	}
