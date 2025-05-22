@@ -1,6 +1,7 @@
 package main
 
 import (
+	"AuthService/internal/middleware"
 	"AuthService/internal/repository"
 	"AuthService/internal/server"
 	"AuthService/internal/service"
@@ -54,6 +55,9 @@ func main() {
 	// Создание экземпляра Gin
 	r := gin.Default()
 
+	// Добавляем middleware для обработки ошибок
+	r.Use(middleware.ErrorHandler())
+
 	// Настройка CORS
 	r.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "http://localhost:8080")
@@ -89,6 +93,8 @@ func main() {
 	// Маршруты для аутентификации
 	r.POST("/api/auth/register", authHandler.Register)
 	r.POST("/api/auth/login", authHandler.Login)
+	r.GET("/api/auth/validate", authHandler.ValidateToken)
+	r.POST("/api/auth/logout", authHandler.Logout)
 
 	// Добавляем Swagger UI
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))

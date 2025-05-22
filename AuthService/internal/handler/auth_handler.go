@@ -3,6 +3,7 @@ package handler
 import (
     "AuthService/internal/models"
     "AuthService/internal/service"
+    "AuthService/internal/errors"
     "github.com/gin-gonic/gin"
     "github.com/Luxtington/Shared/logger"
     "go.uber.org/zap"
@@ -37,12 +38,18 @@ func NewAuthHandler(authService service.IAuthService) *AuthHandler {
 func (h *AuthHandler) Register(c *gin.Context) {
     var req models.RegisterRequest
     if err := c.ShouldBindJSON(&req); err != nil {
-        c.JSON(400, gin.H{"error": "неверный формат данных"})
+        c.Error(errors.NewValidationError("Неверный формат данных", err))
         return
     }
+
     user, token, err := h.authService.Register(req.Username, req.Email, req.Password)
     if err != nil {
-        c.JSON(400, gin.H{"error": err.Error()})
+        switch err.Error() {
+        case service.ErrUserAlreadyExists.Error():
+            c.Error(errors.NewConflictError("Пользователь уже существует", err))
+        default:
+            c.Error(errors.NewInternalServerError("Ошибка при регистрации", err))
+        }
         return
     }
     
@@ -77,12 +84,18 @@ func (h *AuthHandler) Register(c *gin.Context) {
 func (h *AuthHandler) Login(c *gin.Context) {
     var req models.LoginRequest
     if err := c.ShouldBindJSON(&req); err != nil {
-        c.JSON(400, gin.H{"error": "неверный формат данных"})
+        c.Error(errors.NewValidationError("Неверный формат данных", err))
         return
     }
+
     user, token, err := h.authService.Login(req.Username, req.Password)
     if err != nil {
-        c.JSON(401, gin.H{"error": err.Error()})
+        switch err.Error() {
+        case service.ErrUserNotFound.Error(), service.ErrInvalidPassword.Error():
+            c.Error(errors.NewUnauthorizedError("Неверное имя пользователя или пароль", err))
+        default:
+            c.Error(errors.NewInternalServerError("Ошибка при входе", err))
+        }
         return
     }
     
@@ -122,19 +135,19 @@ func (h *AuthHandler) ValidateToken(c *gin.Context) {
         var err error
         token, err = c.Cookie("auth_token")
         if err != nil {
-            c.JSON(401, gin.H{"error": "токен не предоставлен"})
+            c.Error(errors.NewUnauthorizedError("Токен не предоставлен", err))
             return
         }
     }
 
     if token == "" {
-        c.JSON(401, gin.H{"error": "токен не предоставлен"})
+        c.Error(errors.NewUnauthorizedError("Токен не предоставлен", nil))
         return
     }
 
     user, err := h.authService.ValidateToken(token)
     if err != nil {
-        c.JSON(401, gin.H{"error": err.Error()})
+        c.Error(errors.NewUnauthorizedError("Недействительный токен", err))
         return
     }
 

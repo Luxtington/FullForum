@@ -2,8 +2,11 @@ package server
 
 import (
 	"AuthService/internal/service"
+	"AuthService/internal/errors"
 	"github.com/gin-gonic/gin"
 	"net/http"
+	"strings"
+	_"time"
 )
 
 type AuthHandler struct {
@@ -36,17 +39,17 @@ type AuthResponse struct {
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.Error(errors.NewValidationError("Неверный формат данных", err))
 		return
 	}
 
 	user, token, err := h.authService.Register(req.Username, req.Email, req.Password)
 	if err != nil {
 		if err == service.ErrUserAlreadyExists {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			c.Error(errors.NewConflictError("Пользователь уже существует", err))
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "ошибка при регистрации"})
+		c.Error(errors.NewInternalServerError("Ошибка при регистрации", err))
 		return
 	}
 
@@ -62,17 +65,17 @@ func (h *AuthHandler) Register(c *gin.Context) {
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "неверный формат данных"})
+		c.Error(errors.NewValidationError("Неверный формат данных", err))
 		return
 	}
 
 	user, token, err := h.authService.Login(req.Username, req.Password)
 	if err != nil {
 		if err == service.ErrUserNotFound || err == service.ErrInvalidPassword {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "неверное имя пользователя или пароль"})
+			c.Error(errors.NewUnauthorizedError("Неверное имя пользователя или пароль", err))
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "ошибка при входе"})
+		c.Error(errors.NewInternalServerError("Ошибка при входе", err))
 		return
 	}
 
@@ -83,4 +86,45 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		Username: user.Username,
 		Token:    token,
 	})
+}
+
+func (h *AuthHandler) ValidateToken(c *gin.Context) {
+	authHeader := c.GetHeader("Authorization")
+	var token string
+	if authHeader != "" {
+		token = strings.TrimPrefix(authHeader, "Bearer ")
+	} else {
+		var err error
+		token, err = c.Cookie("auth_token")
+		if err != nil {
+			c.Error(errors.NewUnauthorizedError("Токен не предоставлен", err))
+			return
+		}
+	}
+
+	if token == "" {
+		c.Error(errors.NewUnauthorizedError("Токен не предоставлен", nil))
+		return
+	}
+
+	user, err := h.authService.ValidateToken(token)
+	if err != nil {
+		c.Error(errors.NewUnauthorizedError("Недействительный токен", err))
+		return
+	}
+
+	c.JSON(http.StatusOK, user)
+}
+
+func (h *AuthHandler) Logout(c *gin.Context) {
+	c.SetCookie(
+		"auth_token",
+		"",
+		-1,
+		"/",
+		"",
+		false,
+		true,
+	)
+	c.JSON(http.StatusOK, gin.H{"message": "успешный выход"})
 } 
