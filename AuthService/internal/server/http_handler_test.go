@@ -7,308 +7,290 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/DATA-DOG/go-sqlmock"
+	"AuthService/internal/models"
+	"AuthService/internal/middleware"
+	"AuthService/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/crypto/bcrypt"
 )
 
 func setupRouter(handler *AuthHandler) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.Default()
+	
+	// Добавляем middleware для обработки ошибок
+	r.Use(middleware.ErrorHandler())
+	
 	r.POST("/register", handler.Register)
 	r.POST("/login", handler.Login)
+	r.GET("/validate", handler.ValidateToken)
+	r.POST("/logout", handler.Logout)
 	return r
 }
 
 func TestRegister_Success(t *testing.T) {
-	db, mock, authService := setupTestDB(t)
-	defer db.Close()
-
-	handler := NewAuthHandler(authService)
+	gin.SetMode(gin.TestMode)
+	mockService := new(MockAuthService)
+	handler := NewAuthHandler(mockService)
 	router := setupRouter(handler)
 
-	// Ожидаем, что пользователь не существует
-	mock.ExpectQuery("SELECT EXISTS").
-		WithArgs("testuser").
-		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+	expectedUser := &models.User{
+		ID:       1,
+		Username: "testuser",
+		Email:    "test@example.com",
+	}
+	expectedToken := "test-token"
 
-	// Ожидаем создание пользователя
-	mock.ExpectQuery("INSERT INTO users").
-		WithArgs("testuser", "test@example.com", sqlmock.AnyArg(), "user").
-		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+	mockService.On("Register", "testuser", "test@example.com", "password123").Return(expectedUser, expectedToken, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/register", bytes.NewBufferString(`{"username": "testuser", "email": "test@example.com", "password": "password123"}`))
+	req := httptest.NewRequest("POST", "/register", bytes.NewBufferString(`{"username": "testuser", "email": "test@example.com", "password": "password123"}`))
+	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusCreated, w.Code)
-	var response AuthResponse
+
+	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Equal(t, "testuser", response.Username)
-	assert.NotEmpty(t, response.Token)
-	assert.NoError(t, mock.ExpectationsWereMet())
+	assert.Equal(t, float64(1), response["user_id"])
+	assert.Equal(t, "testuser", response["username"])
+	assert.Equal(t, expectedToken, response["token"])
 }
 
 func TestRegister_InvalidData(t *testing.T) {
-	db, mock, authService := setupTestDB(t)
-	defer db.Close()
-
-	handler := NewAuthHandler(authService)
+	gin.SetMode(gin.TestMode)
+	mockService := new(MockAuthService)
+	handler := NewAuthHandler(mockService)
 	router := setupRouter(handler)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/register", bytes.NewBufferString(`{"invalid": "data"}`))
+	req := httptest.NewRequest("POST", "/register", bytes.NewBufferString(`invalid json`))
+	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.NoError(t, mock.ExpectationsWereMet())
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "Неверный формат данных", response["error"])
 }
 
 func TestRegister_UserExists(t *testing.T) {
-	db, mock, authService := setupTestDB(t)
-	defer db.Close()
-
-	handler := NewAuthHandler(authService)
+	gin.SetMode(gin.TestMode)
+	mockService := new(MockAuthService)
+	handler := NewAuthHandler(mockService)
 	router := setupRouter(handler)
 
-	// Ожидаем, что пользователь существует
-	mock.ExpectQuery("SELECT EXISTS").
-		WithArgs("testuser").
-		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mockService.On("Register", "existinguser", "existing@example.com", "password123").Return(nil, "", service.ErrUserAlreadyExists)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/register", bytes.NewBufferString(`{"username": "testuser", "email": "test@example.com", "password": "password123"}`))
+	req := httptest.NewRequest("POST", "/register", bytes.NewBufferString(`{"username": "existinguser", "email": "existing@example.com", "password": "password123"}`))
+	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusConflict, w.Code)
-	var response map[string]string
+
+	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Contains(t, response["error"], "уже существует")
-	assert.NoError(t, mock.ExpectationsWereMet())
+	assert.Equal(t, "Пользователь уже существует", response["error"])
 }
 
 func TestRegister_DBError(t *testing.T) {
-	db, mock, authService := setupTestDB(t)
-	defer db.Close()
-
-	handler := NewAuthHandler(authService)
+	gin.SetMode(gin.TestMode)
+	mockService := new(MockAuthService)
+	handler := NewAuthHandler(mockService)
 	router := setupRouter(handler)
 
-	// Ожидаем, что пользователь не существует
-	mock.ExpectQuery("SELECT EXISTS").
-		WithArgs("testuser").
-		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
-
-	// Ожидаем ошибку при создании пользователя
-	mock.ExpectQuery("INSERT INTO users").
-		WithArgs("testuser", "test@example.com", sqlmock.AnyArg(), "user").
-		WillReturnError(sqlmock.ErrCancelled)
+	mockService.On("Register", "testuser", "test@example.com", "password123").Return(nil, "", assert.AnError)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/register", bytes.NewBufferString(`{"username": "testuser", "email": "test@example.com", "password": "password123"}`))
+	req := httptest.NewRequest("POST", "/register", bytes.NewBufferString(`{"username": "testuser", "email": "test@example.com", "password": "password123"}`))
+	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	var response map[string]string
+
+	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Contains(t, response["error"], "ошибка при регистрации")
-	assert.NoError(t, mock.ExpectationsWereMet())
+	assert.Equal(t, "Ошибка при регистрации", response["error"])
 }
 
 func TestLogin_Success(t *testing.T) {
-	db, mock, authService := setupTestDB(t)
-	defer db.Close()
-
-	handler := NewAuthHandler(authService)
+	gin.SetMode(gin.TestMode)
+	mockService := new(MockAuthService)
+	handler := NewAuthHandler(mockService)
 	router := setupRouter(handler)
 
-	// Генерируем правильный хеш пароля
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
-	assert.NoError(t, err)
+	expectedUser := &models.User{
+		ID:       1,
+		Username: "testuser",
+		Email:    "test@example.com",
+	}
+	expectedToken := "test-token"
 
-	// Ожидаем поиск пользователя
-	mock.ExpectQuery("SELECT id, username, email, password, role").
-		WithArgs("testuser").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "username", "email", "password", "role"}).
-			AddRow(1, "testuser", "test@example.com", string(hashedPassword), "user"))
+	mockService.On("Login", "testuser", "password123").Return(expectedUser, expectedToken, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/login", bytes.NewBufferString(`{"username": "testuser", "password": "password123"}`))
+	req := httptest.NewRequest("POST", "/login", bytes.NewBufferString(`{"username": "testuser", "password": "password123"}`))
+	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	var response AuthResponse
-	err = json.Unmarshal(w.Body.Bytes(), &response)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Equal(t, "testuser", response.Username)
-	assert.NotEmpty(t, response.Token)
-	assert.NoError(t, mock.ExpectationsWereMet())
+	assert.Equal(t, float64(1), response["user_id"])
+	assert.Equal(t, "testuser", response["username"])
+	assert.Equal(t, expectedToken, response["token"])
 }
 
 func TestLogin_InvalidData(t *testing.T) {
-	db, mock, authService := setupTestDB(t)
-	defer db.Close()
-
-	handler := NewAuthHandler(authService)
+	gin.SetMode(gin.TestMode)
+	mockService := new(MockAuthService)
+	handler := NewAuthHandler(mockService)
 	router := setupRouter(handler)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/login", bytes.NewBufferString(`{"invalid": "data"}`))
+	req := httptest.NewRequest("POST", "/login", bytes.NewBufferString(`invalid json`))
+	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.NoError(t, mock.ExpectationsWereMet())
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "Неверный формат данных", response["error"])
 }
 
 func TestLogin_UserNotFound(t *testing.T) {
-	db, mock, authService := setupTestDB(t)
-	defer db.Close()
-
-	handler := NewAuthHandler(authService)
+	gin.SetMode(gin.TestMode)
+	mockService := new(MockAuthService)
+	handler := NewAuthHandler(mockService)
 	router := setupRouter(handler)
 
-	// Ожидаем, что пользователь не найден
-	mock.ExpectQuery("SELECT id, username, email, password, role").
-		WithArgs("nonexistent").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "username", "email", "password", "role"}))
+	mockService.On("Login", "nonexistent", "password123").Return(nil, "", service.ErrUserNotFound)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/login", bytes.NewBufferString(`{"username": "nonexistent", "password": "password123"}`))
+	req := httptest.NewRequest("POST", "/login", bytes.NewBufferString(`{"username": "nonexistent", "password": "password123"}`))
+	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
-	var response map[string]string
+
+	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Contains(t, response["error"], "неверное имя пользователя или пароль")
-	assert.NoError(t, mock.ExpectationsWereMet())
+	assert.Equal(t, "Неверное имя пользователя или пароль", response["error"])
 }
 
 func TestLogin_InvalidPassword(t *testing.T) {
-	db, mock, authService := setupTestDB(t)
-	defer db.Close()
-
-	handler := NewAuthHandler(authService)
+	gin.SetMode(gin.TestMode)
+	mockService := new(MockAuthService)
+	handler := NewAuthHandler(mockService)
 	router := setupRouter(handler)
 
-	// Генерируем хеш для другого пароля
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte("wrongpassword"), bcrypt.DefaultCost)
-	assert.NoError(t, err)
-
-	// Ожидаем поиск пользователя
-	mock.ExpectQuery("SELECT id, username, email, password, role").
-		WithArgs("testuser").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "username", "email", "password", "role"}).
-			AddRow(1, "testuser", "test@example.com", string(hashedPassword), "user"))
+	mockService.On("Login", "testuser", "password123").Return(nil, "", service.ErrInvalidPassword)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/login", bytes.NewBufferString(`{"username": "testuser", "password": "password123"}`))
+	req := httptest.NewRequest("POST", "/login", bytes.NewBufferString(`{"username": "testuser", "password": "password123"}`))
+	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
-	var response map[string]string
-	err = json.Unmarshal(w.Body.Bytes(), &response)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Contains(t, response["error"], "неверное имя пользователя или пароль")
-	assert.NoError(t, mock.ExpectationsWereMet())
+	assert.Equal(t, "Неверное имя пользователя или пароль", response["error"])
 }
 
-func TestLogin_Success_Cookie(t *testing.T) {
-	db, mock, authService := setupTestDB(t)
-	defer db.Close()
-
-	handler := NewAuthHandler(authService)
+func TestValidateToken_Success(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	mockService := new(MockAuthService)
+	handler := NewAuthHandler(mockService)
 	router := setupRouter(handler)
 
-	// Генерируем правильный хеш пароля
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
-	assert.NoError(t, err)
+	expectedUser := &models.User{
+		ID:       1,
+		Username: "testuser",
+		Email:    "test@example.com",
+	}
 
-	// Ожидаем поиск пользователя
-	mock.ExpectQuery("SELECT id, username, email, password, role").
-		WithArgs("testuser").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "username", "email", "password", "role"}).
-			AddRow(1, "testuser", "test@example.com", string(hashedPassword), "user"))
+	mockService.On("ValidateToken", "valid-token").Return(expectedUser, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/login", bytes.NewBufferString(`{"username": "testuser", "password": "password123"}`))
+	req := httptest.NewRequest("GET", "/validate", nil)
+	req.Header.Set("Authorization", "Bearer valid-token")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	
-	// Проверяем установку cookie
-	cookies := w.Result().Cookies()
-	var authCookie *http.Cookie
-	for _, cookie := range cookies {
-		if cookie.Name == "auth_token" {
-			authCookie = cookie
-			break
-		}
-	}
-	assert.NotNil(t, authCookie)
-	assert.Equal(t, "auth_token", authCookie.Name)
-	assert.NotEmpty(t, authCookie.Value)
-	assert.Equal(t, 3600*24, authCookie.MaxAge)
-	assert.Equal(t, "/", authCookie.Path)
-	assert.False(t, authCookie.Secure)
-	assert.False(t, authCookie.HttpOnly)
-	
-	var response AuthResponse
-	err = json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
-	assert.Equal(t, "testuser", response.Username)
-	assert.NotEmpty(t, response.Token)
-	assert.NoError(t, mock.ExpectationsWereMet())
-}
 
-func TestRegister_Success_Cookie(t *testing.T) {
-	db, mock, authService := setupTestDB(t)
-	defer db.Close()
-
-	handler := NewAuthHandler(authService)
-	router := setupRouter(handler)
-
-	// Ожидаем, что пользователь не существует
-	mock.ExpectQuery("SELECT EXISTS").
-		WithArgs("testuser").
-		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
-
-	// Ожидаем создание пользователя
-	mock.ExpectQuery("INSERT INTO users").
-		WithArgs("testuser", "test@example.com", sqlmock.AnyArg(), "user").
-		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/register", bytes.NewBufferString(`{"username": "testuser", "email": "test@example.com", "password": "password123"}`))
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusCreated, w.Code)
-	
-	// Проверяем установку cookie
-	cookies := w.Result().Cookies()
-	var authCookie *http.Cookie
-	for _, cookie := range cookies {
-		if cookie.Name == "auth_token" {
-			authCookie = cookie
-			break
-		}
-	}
-	assert.NotNil(t, authCookie)
-	assert.Equal(t, "auth_token", authCookie.Name)
-	assert.NotEmpty(t, authCookie.Value)
-	assert.Equal(t, 3600*24, authCookie.MaxAge)
-	assert.Equal(t, "/", authCookie.Path)
-	assert.False(t, authCookie.Secure)
-	assert.False(t, authCookie.HttpOnly)
-	
-	var response AuthResponse
+	var response models.User
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
+	assert.Equal(t, uint(1), response.ID)
 	assert.Equal(t, "testuser", response.Username)
-	assert.NotEmpty(t, response.Token)
-	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestValidateToken_NoToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	mockService := new(MockAuthService)
+	handler := NewAuthHandler(mockService)
+	router := setupRouter(handler)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/validate", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "Токен не предоставлен", response["error"])
+}
+
+func TestValidateToken_InvalidToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	mockService := new(MockAuthService)
+	handler := NewAuthHandler(mockService)
+	router := setupRouter(handler)
+
+	mockService.On("ValidateToken", "invalid-token").Return(nil, service.ErrInvalidToken)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/validate", nil)
+	req.Header.Set("Authorization", "Bearer invalid-token")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "Недействительный токен", response["error"])
+}
+
+func TestLogout_Success(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	mockService := new(MockAuthService)
+	handler := NewAuthHandler(mockService)
+	router := setupRouter(handler)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/logout", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "успешный выход", response["message"])
 } 

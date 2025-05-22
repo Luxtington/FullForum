@@ -1,21 +1,25 @@
 package server
 
 import (
+	_"AuthService/internal/models"
 	"AuthService/internal/service"
 	"AuthService/internal/errors"
-	"github.com/gin-gonic/gin"
+	_"encoding/json"
 	"net/http"
+	_"strconv"
 	"strings"
 	_"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 type AuthHandler struct {
-	authService *service.AuthService
+	service service.IAuthService
 }
 
-func NewAuthHandler(authService *service.AuthService) *AuthHandler {
+func NewAuthHandler(service service.IAuthService) *AuthHandler {
 	return &AuthHandler{
-		authService: authService,
+		service: service,
 	}
 }
 
@@ -43,7 +47,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	user, token, err := h.authService.Register(req.Username, req.Email, req.Password)
+	user, token, err := h.service.Register(req.Username, req.Email, req.Password)
 	if err != nil {
 		if err == service.ErrUserAlreadyExists {
 			c.Error(errors.NewConflictError("Пользователь уже существует", err))
@@ -69,7 +73,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	user, token, err := h.authService.Login(req.Username, req.Password)
+	user, token, err := h.service.Login(req.Username, req.Password)
 	if err != nil {
 		if err == service.ErrUserNotFound || err == service.ErrInvalidPassword {
 			c.Error(errors.NewUnauthorizedError("Неверное имя пользователя или пароль", err))
@@ -107,7 +111,7 @@ func (h *AuthHandler) ValidateToken(c *gin.Context) {
 		return
 	}
 
-	user, err := h.authService.ValidateToken(token)
+	user, err := h.service.ValidateToken(token)
 	if err != nil {
 		c.Error(errors.NewUnauthorizedError("Недействительный токен", err))
 		return
