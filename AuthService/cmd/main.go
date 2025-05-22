@@ -11,8 +11,16 @@ import (
 	"github.com/Luxtington/Shared/logger"
 	"go.uber.org/zap"
 	"net/http"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+	_ "AuthService/docs" // Это будет создано после генерации swagger
 )
 
+// @title Auth Service API
+// @version 1.0
+// @description API для сервиса аутентификации
+// @host localhost:8082
+// @BasePath /api
 func main() {
 	logger.InitLogger()
 	log := logger.GetLogger()
@@ -81,6 +89,9 @@ func main() {
 	// Маршруты для аутентификации
 	r.POST("/api/auth/register", authHandler.Register)
 	r.POST("/api/auth/login", authHandler.Login)
+
+	// Добавляем Swagger UI
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Запуск HTTP сервера
 	if err := r.Run(":8082"); err != nil {

@@ -52,7 +52,6 @@ func setupRouter(handler *AuthHandler) *gin.Engine {
 }
 
 func TestRegister_Success(t *testing.T) {
-	// Настройка
 	gin.SetMode(gin.TestMode)
 	mockService := new(MockAuthService)
 	handler := NewAuthHandler(mockService)
@@ -66,15 +65,12 @@ func TestRegister_Success(t *testing.T) {
 
 	mockService.On("Register", "testuser", "test@example.com", "password123").Return(expectedUser, expectedToken, nil)
 
-	// Создание тестового запроса
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest("POST", "/register", bytes.NewBufferString(`{"username": "testuser", "email": "test@example.com", "password": "password123"}`))
 
-	// Выполнение запроса
 	handler.Register(c)
 
-	// Проверки
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var response map[string]interface{}
@@ -87,7 +83,7 @@ func TestRegister_Success(t *testing.T) {
 	assert.Equal(t, "test@example.com", user["email"])
 	assert.Equal(t, "http://localhost:8081", response["redirect_url"])
 
-	// Проверка куки
+
 	cookies := w.Result().Cookies()
 	assert.Len(t, cookies, 1)
 	assert.Equal(t, "auth_token", cookies[0].Name)
@@ -95,20 +91,17 @@ func TestRegister_Success(t *testing.T) {
 }
 
 func TestRegister_InvalidData(t *testing.T) {
-	// Настройка
 	gin.SetMode(gin.TestMode)
 	mockService := new(MockAuthService)
 	handler := NewAuthHandler(mockService)
 
-	// Создание тестового запроса
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest("POST", "/register", bytes.NewBufferString(`{"invalid": "data"}`))
 
-	// Выполнение запроса
 	handler.Register(c)
 
-	// Проверки
+
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
 	var response map[string]interface{}
@@ -118,22 +111,21 @@ func TestRegister_InvalidData(t *testing.T) {
 }
 
 func TestRegister_Error(t *testing.T) {
-	// Настройка
+	
 	gin.SetMode(gin.TestMode)
 	mockService := new(MockAuthService)
 	handler := NewAuthHandler(mockService)
 
 	mockService.On("Register", "testuser", "test@example.com", "password123").Return(nil, "", assert.AnError)
 
-	// Создание тестового запроса
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest("POST", "/register", bytes.NewBufferString(`{"username": "testuser", "email": "test@example.com", "password": "password123"}`))
 
-	// Выполнение запроса
+
 	handler.Register(c)
 
-	// Проверки
+
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
 	var response map[string]interface{}
@@ -143,7 +135,6 @@ func TestRegister_Error(t *testing.T) {
 }
 
 func TestLogin_Success(t *testing.T) {
-	// Настройка
 	gin.SetMode(gin.TestMode)
 	mockService := new(MockAuthService)
 	handler := NewAuthHandler(mockService)
@@ -157,15 +148,12 @@ func TestLogin_Success(t *testing.T) {
 
 	mockService.On("Login", "testuser", "password123").Return(expectedUser, expectedToken, nil)
 
-	// Создание тестового запроса
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(`{"username": "testuser", "password": "password123"}`))
 
-	// Выполнение запроса
 	handler.Login(c)
 
-	// Проверки
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var response map[string]interface{}
@@ -179,7 +167,7 @@ func TestLogin_Success(t *testing.T) {
 	assert.Equal(t, expectedToken, response["token"])
 	assert.Equal(t, "http://localhost:8081", response["redirect_url"])
 
-	// Проверка куки
+
 	cookies := w.Result().Cookies()
 	assert.Len(t, cookies, 1)
 	assert.Equal(t, "auth_token", cookies[0].Name)
@@ -187,20 +175,18 @@ func TestLogin_Success(t *testing.T) {
 }
 
 func TestLogin_InvalidData(t *testing.T) {
-	// Настройка
 	gin.SetMode(gin.TestMode)
 	mockService := new(MockAuthService)
 	handler := NewAuthHandler(mockService)
 
-	// Создание тестового запроса
+
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(`{"invalid": "data"}`))
 
-	// Выполнение запроса
+
 	handler.Login(c)
 
-	// Проверки
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
 	var response map[string]interface{}
@@ -210,19 +196,19 @@ func TestLogin_InvalidData(t *testing.T) {
 }
 
 func TestLogin_Error(t *testing.T) {
-	// Настройка
+
 	gin.SetMode(gin.TestMode)
 	mockService := new(MockAuthService)
 	handler := NewAuthHandler(mockService)
 
 	mockService.On("Login", "testuser", "password123").Return(nil, "", assert.AnError)
 
-	// Создание тестового запроса
+
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(`{"username": "testuser", "password": "password123"}`))
 
-	// Выполнение запроса
+	
 	handler.Login(c)
 
 	// Проверки

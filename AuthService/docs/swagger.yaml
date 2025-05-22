@@ -1,0 +1,143 @@
+basePath: /api
+definitions:
+  models.LoginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  models.SwaggerResponse:
+    properties:
+      error:
+        type: string
+      message:
+        type: string
+      redirect_url:
+        type: string
+      token:
+        type: string
+      user:
+        $ref: '#/definitions/models.User'
+    type: object
+  models.User:
+    properties:
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: integer
+      role:
+        type: string
+      updated_at:
+        type: string
+      username:
+        type: string
+    type: object
+host: localhost:8082
+info:
+  contact: {}
+  description: API для сервиса аутентификации
+  title: Auth Service API
+  version: "1.0"
+paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate user with username and password
+      parameters:
+      - description: Login credentials
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/models.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Returns user data, token and redirect URL
+          schema:
+            $ref: '#/definitions/models.SwaggerResponse'
+        "400":
+          description: 'error: Bad request or invalid data format'
+          schema:
+            $ref: '#/definitions/models.SwaggerResponse'
+        "401":
+          description: 'error: Authentication failed'
+          schema:
+            $ref: '#/definitions/models.SwaggerResponse'
+      summary: User login
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      description: Clear authentication cookie
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'message: Logout success message'
+          schema:
+            $ref: '#/definitions/models.SwaggerResponse'
+      summary: User logout
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Register a new user with username, email and password
+      parameters:
+      - description: Registration data
+        in: body
+        name: input
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Returns user data, token and redirect URL
+          schema:
+            $ref: '#/definitions/models.SwaggerResponse'
+        "400":
+          description: 'error: Registration error message'
+          schema:
+            $ref: '#/definitions/models.SwaggerResponse'
+      summary: Register a new user
+      tags:
+      - auth
+  /auth/validate:
+    get:
+      description: Validate the JWT token from Authorization header or cookie
+      parameters:
+      - description: Bearer token
+        in: header
+        name: Authorization
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Returns authenticated user data
+          schema:
+            $ref: '#/definitions/models.User'
+        "401":
+          description: 'error: Token not provided or invalid'
+          schema:
+            $ref: '#/definitions/models.SwaggerResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Validate JWT token
+      tags:
+      - auth
+swagger: "2.0"
